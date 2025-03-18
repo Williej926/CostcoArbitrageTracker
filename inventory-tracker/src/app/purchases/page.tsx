@@ -4,19 +4,27 @@
 import { useState, useEffect } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { Purchase, GoldUnit, Currency } from "@/types";
+import ProductSelector from "@/components/ProductSelector";
+import { getProducts } from "@/utils/productStorage";
+import { getFeeSettings } from '@/utils/feeSettings';
 
 export default function PurchasesPage() {
   const [calculatedPrice, setCalculatedPrice] = useState<number | null>(null);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
+  const [products, setProducts] = useState([]);
+  
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split("T")[0],
+    productId: "",
+    quantity: "1",
     amount: "",
     unit: "oz" as GoldUnit,
     pricePerUnit: "",
     currency: "USD" as Currency,
-    orderNumber: "",
+    source: "",
     notes: "",
-
+    userEnteredNotes: "",
+    
     // Payment methods
     paymentMethods: {
       amexSub: false,
@@ -26,85 +34,105 @@ export default function PurchasesPage() {
       costcoCiti: false,
       usBankSmartly: false,
       chaseInkPremier: false,
-      other: false,
+      other: false
     },
     otherPaymentMethodName: "",
-
-    // Discount settings (changed cashback to kasheesh)
+    
+    // Discount settings
     usedKasheesh: false,
     hasExecutiveMembership: false,
     otherDiscount: false,
     otherDiscountRate: "",
-    otherDiscountName: "",
+    otherDiscountName: ""
   });
-  const paymentMethodDiscounts = {
-    amexSub: 0, // 1.5%
-    citiAA: 0.018, // 2%
-    bofaPlatHonors: 0.02625, // 2.5%
-    venmo: 0.05, // 1%
-    costcoCiti: 0.038, // 2%
-    usBankSmartly: 0.04, // 1.5%
-    chaseInkPremier: 0.025, // 3%
-    other: 0, // 0% by default
-  };
+  
+  // Get the selected product details
+  const selectedProduct = products.find(p => p.id === formData.productId);
+  
+  // Load purchases from localStorage on component mount
+  useEffect(() => {
+    setProducts(getProducts());
+    const savedPurchases = localStorage.getItem('goldPurchases');
+    if (savedPurchases) {
+      const parsedPurchases = JSON.parse(savedPurchases);
+      const purchasesWithDates = parsedPurchases.map((purchase: any) => ({
+        ...purchase,
+        date: new Date(purchase.date)
+      }));
+      setPurchases(purchasesWithDates);
+    }
+  }, []);
+  
+  // Handle regular form changes
   const handleChange = (
     e: React.ChangeEvent<
       HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
     >,
   ) => {
     const { name, value, type } = e.target as HTMLInputElement;
-
+    
     // Handle different input types appropriately
-    const newValue =
-      type === "checkbox" ? (e.target as HTMLInputElement).checked : value;
-
+    const newValue = type === "checkbox" 
+      ? (e.target as HTMLInputElement).checked 
+      : value;
+    
+    // Special handling for notes field
+    if (name === "notes") {
+      setFormData({
+        ...formData,
+        notes: value,
+        userEnteredNotes: value,
+      });
+    } else {
+      setFormData({
+        ...formData,
+        [name]: newValue,
+      });
+    }
+  };
+  
+  // Special handler for product selection
+  const handleProductChange = (productId: string) => {
     setFormData({
       ...formData,
-      [name]: newValue,
+      productId,
     });
   };
-
+  
   // Handle payment method card clicks
   const handlePaymentMethodToggle = (method: string) => {
     setFormData({
       ...formData,
       paymentMethods: {
         ...formData.paymentMethods,
-        [method]: !formData.paymentMethods[method],
-      },
+        [method]: !formData.paymentMethods[method]
+      }
     });
   };
-  const updateCalculatedPrice = () => {
-    if (!formData.amount || !formData.pricePerUnit) {
-      setCalculatedPrice(null);
-      return;
-    }
 
-    const amount = parseFloat(formData.amount);
-    const pricePerUnit = parseFloat(formData.pricePerUnit);
-
-    if (isNaN(amount) || isNaN(pricePerUnit)) {
-      setCalculatedPrice(null);
-      return;
-    }
-
-    const basePrice = amount * pricePerUnit;
-    const effectivePrice = calculateEffectivePrice(basePrice);
-    setCalculatedPrice(effectivePrice);
+  const paymentMethodDiscounts = {
+    amexSub: 0.015,
+    citiAA: 0.02,
+    bofaPlatHonors: 0.025,
+    venmo: 0.01,
+    costcoCiti: 0.02,
+    usBankSmartly: 0.015,
+    chaseInkPremier: 0.03,
+    other: 0
   };
+
   const calculateEffectivePrice = (basePrice: number): number => {
     let effectivePrice = basePrice;
     let discountDetails = [];
-
-    // Get only user-entered notes (excluding any previously generated notes)
-    // This is a key change - we need to track user notes separately
-    const userEnteredNotes = formData.userEnteredNotes || ""; // Use a separate field for user's actual notes
-
+    
+    // Store original notes
+    const userNotes = formData.userEnteredNotes;
+    
     // Apply payment method discounts
     const selectedMethods = Object.keys(formData.paymentMethods).filter(
       (method) => formData.paymentMethods[method],
     );
-
+    
     for (const method of selectedMethods) {
       const discountRate = paymentMethodDiscounts[method] || 0;
       if (discountRate > 0) {
@@ -115,15 +143,15 @@ export default function PurchasesPage() {
         );
       }
     }
-
+    
     // Apply Kasheesh fee if used
     if (formData.usedKasheesh) {
-      const kasheeshRate = 0.02;
-      const kasheeshAmount = basePrice * kasheeshRate;
-      effectivePrice += kasheeshAmount;
-      discountDetails.push(`Kasheesh: 2% fee (+$${kasheeshAmount.toFixed(2)})`);
+        const { kasheeshFee } = getFeeSettings();
+        const kasheeshAmount = basePrice * kasheeshFee;
+        effectivePrice += kasheeshAmount;
+        discountDetails.push(`Kasheesh: ${(kasheeshFee * 100).toFixed(2)}% fee (+$${kasheeshAmount.toFixed(2)})`);
     }
-
+    
     // Apply executive membership discount
     if (formData.hasExecutiveMembership) {
       const execDiscountRate = 0.02;
@@ -133,7 +161,7 @@ export default function PurchasesPage() {
         `Executive membership: 2% (-$${execDiscountAmount.toFixed(2)})`,
       );
     }
-
+    
     // Apply other discount if applicable
     if (formData.otherDiscount && formData.otherDiscountRate) {
       const otherRate = parseFloat(formData.otherDiscountRate) / 100;
@@ -143,15 +171,18 @@ export default function PurchasesPage() {
         `${formData.otherDiscountName || "Other discount"}: ${formData.otherDiscountRate}% (-$${otherAmount.toFixed(2)})`,
       );
     }
-
-    // Generate new notes based on current state
+    
+    // Reset notes to user's original input
+    formData.notes = userNotes;
+    
+    // Add generated notes for discounts and payment methods
     let generatedNotes = "";
-
+    
     // Add discount details to notes if any were applied
     if (discountDetails.length > 0) {
       generatedNotes += `Applied discounts: ${discountDetails.join(", ")}. Original price: $${basePrice.toFixed(2)}`;
     }
-
+    
     // Add payment methods to notes
     if (selectedMethods.length > 0) {
       const paymentMethodNote = `Payment methods: ${selectedMethods
@@ -161,95 +192,126 @@ export default function PurchasesPage() {
             : method,
         )
         .join(", ")}`;
-
+      
       if (generatedNotes) {
         generatedNotes += "\n" + paymentMethodNote;
       } else {
         generatedNotes = paymentMethodNote;
       }
     }
-
-    // Combine user notes with freshly generated notes
+    
+    // Combine user notes with generated notes
     if (generatedNotes) {
-      formData.notes = userEnteredNotes
-        ? userEnteredNotes + "\n\n" + generatedNotes
-        : generatedNotes;
-    } else {
-      formData.notes = userEnteredNotes;
+      if (userNotes) {
+        formData.notes = userNotes + "\n\n" + generatedNotes;
+      } else {
+        formData.notes = generatedNotes;
+      }
     }
-
+    
     return effectivePrice;
   };
+  
+  // Update calculated price when relevant fields change
   useEffect(() => {
-    updateCalculatedPrice();
-    const savedPurchases = localStorage.getItem("goldPurchases");
-    if (savedPurchases) {
-      // Convert string dates back to Date objects
-      const parsedPurchases = JSON.parse(savedPurchases);
-      const purchasesWithDates = parsedPurchases.map((purchase) => ({
-        ...purchase,
-        date: new Date(purchase.date),
-      }));
-      setPurchases(purchasesWithDates);
+    if (!formData.pricePerUnit || !formData.quantity || !formData.amount) {
+      setCalculatedPrice(null);
+      return;
     }
+    
+    const quantity = parseFloat(formData.quantity);
+    const pricePerUnit = parseFloat(formData.pricePerUnit);
+    const amount = parseFloat(formData.amount);
+    
+    if (isNaN(quantity) || isNaN(pricePerUnit) || isNaN(amount)) {
+      setCalculatedPrice(null);
+      return;
+    }
+    
+    // Calculate base total price
+    const baseTotalPrice = quantity * pricePerUnit;
+    
+    // Calculate effective price after discounts
+    const effectivePrice = calculateEffectivePrice(baseTotalPrice);
+    setCalculatedPrice(effectivePrice);
   }, [
+    formData.productId,
+    formData.quantity,
     formData.amount,
     formData.pricePerUnit,
     formData.paymentMethods,
     formData.usedKasheesh,
     formData.hasExecutiveMembership,
     formData.otherDiscount,
-    formData.otherDiscountRate,
+    formData.otherDiscountRate
   ]);
 
+  // Handle form submission
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-
-    const amount = parseFloat(formData.amount);
-    const pricePerUnit = parseFloat(formData.pricePerUnit);
-
-    if (isNaN(amount) || isNaN(pricePerUnit)) {
-      alert("Please enter valid numbers for amount and price");
+    
+    if (formData.productId && !selectedProduct) {
+      alert("Please select a valid product");
       return;
     }
-
-    // Calculate base total price
-    const baseTotalPrice = amount * pricePerUnit;
-
+    
+    const quantity = parseFloat(formData.quantity);
+    const pricePerUnit = parseFloat(formData.pricePerUnit);
+    const amount = parseFloat(formData.amount);
+    
+    if (isNaN(quantity) || isNaN(pricePerUnit) || isNaN(amount)) {
+      alert("Please enter valid numbers for quantity, amount, and price");
+      return;
+    }
+    
+    // Calculate total price
+    const totalPrice = quantity * pricePerUnit;
+    
     // Calculate effective price after discounts
-    const effectiveTotalPrice = calculateEffectivePrice(baseTotalPrice);
-
+    const effectivePrice = calculateEffectivePrice(totalPrice);
+    
     // Calculate effective price per unit
-    const effectivePricePerUnit = effectiveTotalPrice / amount;
-
+    const effectivePricePerUnit = effectivePrice / quantity;
+    
+    // Create the purchase object
     const newPurchase: Purchase = {
       id: uuidv4(),
       date: new Date(formData.date),
+      productId: formData.productId,
+      productName: selectedProduct ? selectedProduct.name : "Custom",
+      quantity,
       amount,
       unit: formData.unit,
-      pricePerUnit, // Original price per unit
-      effectivePricePerUnit, // Price after discounts
+      pricePerUnit,
+      effectivePricePerUnit,
       currency: formData.currency,
-      orderNumber: formData.orderNumber,
+      source: formData.source,
       notes: formData.notes,
-      totalPrice: baseTotalPrice,
-      effectiveTotalPrice,
-      discountsApplied: baseTotalPrice !== effectiveTotalPrice,
-      paymentMethods: formData.paymentMethods,
+      totalPrice,
+      effectiveTotalPrice: effectivePrice,
+      discountsApplied: totalPrice !== effectivePrice,
+      paymentMethods: formData.paymentMethods
     };
+    
+    // Add to purchases array
     const updatedPurchases = [newPurchase, ...purchases];
     setPurchases(updatedPurchases);
-    localStorage.setItem("goldPurchases", JSON.stringify(updatedPurchases));
-
+    
+    // Save to localStorage
+    localStorage.setItem('goldPurchases', JSON.stringify(updatedPurchases));
+    
     // Reset form
     setFormData({
       date: new Date().toISOString().split("T")[0],
+      productId: "",
+      quantity: "1",
       amount: "",
       unit: "oz" as GoldUnit,
       pricePerUnit: "",
       currency: "USD" as Currency,
-      orderNumber: "",
+      source: "",
       notes: "",
+      userEnteredNotes: "",
       paymentMethods: {
         amexSub: false,
         citiAA: false,
@@ -258,27 +320,25 @@ export default function PurchasesPage() {
         costcoCiti: false,
         usBankSmartly: false,
         chaseInkPremier: false,
-        other: false,
+        other: false
       },
       otherPaymentMethodName: "",
       usedKasheesh: false,
       hasExecutiveMembership: false,
       otherDiscount: false,
       otherDiscountRate: "",
-      otherDiscountName: "",
+      otherDiscountName: ""
     });
   };
 
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-bold">Gold Purchases</h1>
-
+      
       {/* Purchase Form */}
       <div className="bg-white p-6 rounded-lg shadow-md">
-        <h2 className="text-xl font-semibold mb-4 text-gray-700">
-          Add New Purchase
-        </h2>
-
+        <h2 className="text-xl font-semibold mb-4">Add New Purchase</h2>
+        
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -294,22 +354,54 @@ export default function PurchasesPage() {
                 required
               />
             </div>
-
+            
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                Order Number
+                Source
               </label>
               <input
                 type="text"
-                name="orderNumber"
-                value={formData.orderNumber}
+                name="source"
+                value={formData.source}
                 onChange={handleChange}
-                placeholder="#"
+                placeholder="Dealer, Website, etc."
                 className="form-input"
                 required
               />
             </div>
-
+            
+            {/* Product Selection */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Product
+              </label>
+              <ProductSelector
+                value={formData.productId}
+                onChange={handleProductChange}
+                className="form-input"
+                placeholder="Select a gold product"
+              />
+            </div>
+            
+            {/* Quantity */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Quantity
+              </label>
+              <input
+                type="number"
+                name="quantity"
+                value={formData.quantity}
+                onChange={handleChange}
+                min="1"
+                step="1"
+                placeholder="1"
+                className="form-input"
+                required
+              />
+            </div>
+            
+            {/* Amount */}
             <div>
               <label className="block text-sm font-medium text-gray-700">
                 Amount
@@ -326,7 +418,7 @@ export default function PurchasesPage() {
                 required
               />
             </div>
-
+            
             <div>
               <label className="block text-sm font-medium text-gray-700">
                 Unit
@@ -343,7 +435,7 @@ export default function PurchasesPage() {
                 <option value="kg">Kilogram (kg)</option>
               </select>
             </div>
-
+            
             <div>
               <label className="block text-sm font-medium text-gray-700">
                 Price Per Unit
@@ -360,7 +452,7 @@ export default function PurchasesPage() {
                 required
               />
             </div>
-
+            
             <div>
               <label className="block text-sm font-medium text-gray-700">
                 Currency
@@ -378,14 +470,63 @@ export default function PurchasesPage() {
               </select>
             </div>
           </div>
-
-          {/* Discount Settings Section - Improved Layout */}
+          
+          {/* Dynamic Price Display */}
+          <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <div className="flex justify-between items-center">
+              <div>
+                <h3 className="text-lg font-medium text-gray-900">
+                  Total Cost
+                </h3>
+                <p className="text-sm text-gray-500">
+                  Price after applying all discounts
+                </p>
+              </div>
+              <div className="text-right">
+                {formData.amount && formData.pricePerUnit ? (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-500 line-through">
+                        $
+                        {(
+                          parseFloat(formData.quantity) *
+                          parseFloat(formData.pricePerUnit)
+                        ).toFixed(2)}
+                      </span>
+                      <span className="text-lg font-bold text-emerald-600">
+                        $
+                        {calculatedPrice !== null
+                          ? calculatedPrice.toFixed(2)
+                          : "0.00"}
+                      </span>
+                    </div>
+                    {calculatedPrice !== null && (
+                      <p className="text-xs text-gray-500">
+                        Savings: $
+                        {(
+                          parseFloat(formData.quantity) *
+                            parseFloat(formData.pricePerUnit) -
+                          calculatedPrice
+                        ).toFixed(2)}
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-lg font-bold text-gray-400">
+                    Enter amount and price
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+          
+          {/* Discount Settings Section */}
           <div className="mt-6 border-t pt-6">
             <h3 className="text-lg font-medium text-gray-700 mb-4">
               Discount Settings
             </h3>
-
-            {/* Payment Method Selection - Updated for clickable cards */}
+            
+            {/* Payment Method Selection */}
             <div className="mb-6">
               <label className="block text-sm font-medium text-gray-700 mb-3">
                 Payment Method
@@ -538,23 +679,6 @@ export default function PurchasesPage() {
                   </span>
                 </div>
               </div>
-
-              {/* Show optional payment method name field if "Other" is selected */}
-              {formData.paymentMethods.other && (
-                <div className="mt-3">
-                  <label className="block text-sm font-medium text-gray-700">
-                    Payment Method Name
-                  </label>
-                  <input
-                    type="text"
-                    name="otherPaymentMethodName"
-                    value={formData.otherPaymentMethodName}
-                    onChange={handleChange}
-                    placeholder="Enter payment method name"
-                    className="form-input"
-                  />
-                </div>
-              )}
             </div>
 
             {/* Discounts and Rebates Section */}
@@ -588,7 +712,7 @@ export default function PurchasesPage() {
                   </div>
                 </div>
 
-                {/* Kasheesh Discount */}
+                {/* Kasheesh Fee */}
                 <div className="flex items-start">
                   <div className="flex h-5 items-center">
                     <input
@@ -605,9 +729,9 @@ export default function PurchasesPage() {
                       htmlFor="usedKasheesh"
                       className="font-medium text-gray-700"
                     >
-                      Kasheesh (2%)
+                      Kasheesh
                     </label>
-                    <p className="text-gray-500">Applied Kasheesh discount</p>
+                    <p className="text-gray-500">Applied Kasheesh processing fee</p>
                   </div>
                 </div>
 
@@ -620,7 +744,7 @@ export default function PurchasesPage() {
                       type="checkbox"
                       checked={formData.otherDiscount}
                       onChange={handleChange}
-                      className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 text-gray-700"
+                      className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                     />
                   </div>
                   <div className="ml-3 text-sm flex flex-wrap items-center gap-3">
@@ -639,7 +763,7 @@ export default function PurchasesPage() {
                             value={formData.otherDiscountName}
                             onChange={handleChange}
                             placeholder="Discount name"
-                            className="w-32 sm:w-40 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-gray-700"
+                            className="w-32 sm:w-40 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                           />
                         </div>
                         <div className="flex items-center">
@@ -652,7 +776,7 @@ export default function PurchasesPage() {
                             min="0"
                             max="100"
                             placeholder="Rate"
-                            className="w-16 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-gray-700"
+                            className="w-16 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                           />
                           <span className="ml-1">%</span>
                         </div>
@@ -661,57 +785,9 @@ export default function PurchasesPage() {
                   </div>
                 </div>
               </div>
-              {/* Dynamic Price Display */}
-              <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <h3 className="text-lg font-medium text-gray-900">
-                      Total Cost
-                    </h3>
-                    <p className="text-sm text-gray-500">
-                      Price after applying all discounts
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    {formData.amount && formData.pricePerUnit ? (
-                      <>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm text-gray-500 line-through">
-                            $
-                            {(
-                              parseFloat(formData.amount) *
-                              parseFloat(formData.pricePerUnit)
-                            ).toFixed(2)}
-                          </span>
-                          <span className="text-lg font-bold text-emerald-600">
-                            $
-                            {calculatedPrice !== null
-                              ? calculatedPrice.toFixed(2)
-                              : "0.00"}
-                          </span>
-                        </div>
-                        {calculatedPrice !== null && (
-                          <p className="text-xs text-gray-500">
-                            Savings: $
-                            {(
-                              parseFloat(formData.amount) *
-                                parseFloat(formData.pricePerUnit) -
-                              calculatedPrice
-                            ).toFixed(2)}
-                          </p>
-                        )}
-                      </>
-                    ) : (
-                      <span className="text-lg font-bold text-gray-400">
-                        Enter amount and price
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
-
+          
           <div>
             <label className="block text-sm font-medium text-gray-700">
               Notes
@@ -724,7 +800,7 @@ export default function PurchasesPage() {
               className="form-input"
             />
           </div>
-
+          
           <div className="flex justify-end">
             <button
               type="submit"
@@ -735,11 +811,11 @@ export default function PurchasesPage() {
           </div>
         </form>
       </div>
-
-      {/* Purchase List */}
+      
+      {/* Purchase History Table */}
       <div>
         <h2 className="text-xl font-semibold mb-4">Purchase History</h2>
-
+        
         {purchases.length === 0 ? (
           <div className="bg-white p-6 rounded-lg shadow-md text-center text-gray-500">
             No purchases yet. Use the form above to add your first purchase.
@@ -753,7 +829,13 @@ export default function PurchasesPage() {
                     Date
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Order Number
+                    Product
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Source
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Quantity
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Amount
@@ -776,7 +858,13 @@ export default function PurchasesPage() {
                       {purchase.date.toLocaleDateString()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {purchase.orderNumber}
+                      {purchase.productName || "Custom"}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {purchase.source}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {purchase.quantity}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {purchase.amount} {purchase.unit}
@@ -799,19 +887,17 @@ export default function PurchasesPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                       {purchase.discountsApplied ? (
-                        <>
-                          <span
-                            className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                              purchase.totalPrice > purchase.effectiveTotalPrice
-                                ? "bg-green-100 text-green-800"
-                                : "bg-red-100 text-red-800"
-                            }`}
-                          >
-                            {purchase.totalPrice > purchase.effectiveTotalPrice
-                              ? `Saved $${(purchase.totalPrice - purchase.effectiveTotalPrice).toFixed(2)}`
-                              : `Cost $${(purchase.effectiveTotalPrice - purchase.totalPrice).toFixed(2)} more`}
-                          </span>
-                        </>
+                        <span 
+                          className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                            purchase.totalPrice > purchase.effectiveTotalPrice 
+                              ? 'bg-green-100 text-green-800' 
+                              : 'bg-red-100 text-red-800'
+                          }`}
+                        >
+                          {purchase.totalPrice > purchase.effectiveTotalPrice 
+                            ? `Saved $${(purchase.totalPrice - purchase.effectiveTotalPrice).toFixed(2)}` 
+                            : `Cost $${(purchase.effectiveTotalPrice - purchase.totalPrice).toFixed(2)} more`}
+                        </span>
                       ) : (
                         <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
                           None
