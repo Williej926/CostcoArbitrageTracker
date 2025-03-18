@@ -7,11 +7,10 @@ import { CardHeader } from "@/components/ui/Card";
 import { Card } from "@/components/ui/Card";
 
 export default function Home() {
-  const apiKey = process.env.PURE_API_KEY;
   const [goldPrice, setGoldPrice] = useState<number | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string>("Loading...");
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
+  const [, setIsLoading] = useState<boolean>(true);
+  const [, setError] = useState<string | null>(null);
   useEffect(() => {
     const fetchGoldPrice = async () => {
       try {

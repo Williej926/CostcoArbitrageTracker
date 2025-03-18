@@ -13,6 +13,25 @@ interface PurchaseAllocation {
   costBasis: number;
 }
 
+// Create an interface for parsed purchases/sales from localStorage
+interface ParsedPurchase extends Omit<Purchase, 'date'> {
+  date: string;
+}
+
+interface ParsedSale extends Omit<Sale, 'date' | 'purchaseAllocations'> {
+  date: string;
+  purchaseAllocations?: Array<{
+    purchaseId: string;
+    purchaseDate: string;
+    amount: number;
+    costBasisPerUnit: number;
+    costBasis: number;
+  }>;
+}
+
+// Define a type for allocation field changes
+type AllocationField = "purchaseId" | "amount";
+
 export default function SalesPage() {
   const [calculatedProfit, setCalculatedProfit] = useState<number | null>(null);
   const [sales, setSales] = useState<Sale[]>([]);
@@ -24,7 +43,7 @@ export default function SalesPage() {
     unit: "oz" as GoldUnit,
     pricePerUnit: "",
     currency: "USD" as Currency,
-    buyer: "",
+    orderNumber: "",
     notes: "",
     userEnteredNotes: "",
 
@@ -42,8 +61,8 @@ export default function SalesPage() {
     // Load purchases from localStorage
     const savedPurchases = localStorage.getItem("goldPurchases");
     if (savedPurchases) {
-      const parsedPurchases = JSON.parse(savedPurchases);
-      const purchasesWithDates = parsedPurchases.map((purchase: any) => ({
+      const parsedPurchases = JSON.parse(savedPurchases) as ParsedPurchase[];
+      const purchasesWithDates = parsedPurchases.map((purchase) => ({
         ...purchase,
         date: new Date(purchase.date),
       }));
@@ -53,13 +72,13 @@ export default function SalesPage() {
     // Load sales from localStorage
     const savedSales = localStorage.getItem("goldSales");
     if (savedSales) {
-      const parsedSales = JSON.parse(savedSales);
-      const salesWithDates = parsedSales.map((sale: any) => ({
+      const parsedSales = JSON.parse(savedSales) as ParsedSale[];
+      const salesWithDates = parsedSales.map((sale) => ({
         ...sale,
         date: new Date(sale.date),
         // Handle nested dates for purchase allocations if they exist
         purchaseAllocations: sale.purchaseAllocations
-          ? sale.purchaseAllocations.map((alloc: any) => ({
+          ? sale.purchaseAllocations.map((alloc) => ({
               ...alloc,
               purchaseDate: alloc.purchaseDate
                 ? new Date(alloc.purchaseDate)
@@ -132,7 +151,7 @@ export default function SalesPage() {
   };
 
   // Handle changes to a purchase allocation
-  const handleAllocationChange = (index: number, field: string, value: any) => {
+  const handleAllocationChange = (index: number, field: AllocationField, value: string) => {
     const newAllocations = [...allocations];
 
     if (field === "purchaseId") {
@@ -253,11 +272,27 @@ export default function SalesPage() {
     const userNotes = formData.userEnteredNotes;
 
     // Generate profit details note
-    let generatedNotes = `Profit Details:\n`;
-    generatedNotes += `Sale Amount: ${totalAmount} ${formData.unit} @ $${salePricePerUnit.toFixed(2)} = $${saleTotal.toFixed(2)}\n`;
+    const generatedNotes = `Profit Details:\n` +
+      `Sale Amount: ${totalAmount} ${formData.unit} @ $${salePricePerUnit.toFixed(2)} = $${saleTotal.toFixed(2)}\n` +
+      generateCostBasisText(allocations, totalAmount, totalCostBasis, formData.unit) +
+      generateFeesText(shippingCost, sellerFee, paymentProcessingFee, otherFee, totalFees, formData.otherFeeName) +
+      generateProfitText(profit, totalCostBasis);
 
+    // Update notes
+    formData.notes = userNotes
+      ? `${userNotes}\n\n${generatedNotes}`
+      : generatedNotes;
+  };
+
+  // Helper function to generate cost basis text
+  const generateCostBasisText = (
+    allocations: PurchaseAllocation[],
+    totalAmount: number,
+    totalCostBasis: number,
+    unit: GoldUnit
+  ): string => {
     if (allocations.length > 1) {
-      generatedNotes += `Cost Basis Details:\n`;
+      let text = `Cost Basis Details:\n`;
 
       allocations.forEach((alloc, index) => {
         if (alloc.purchase && alloc.amount > 0) {
@@ -265,40 +300,52 @@ export default function SalesPage() {
           const costBasisPerUnit =
             purchase.effectivePricePerUnit || purchase.pricePerUnit;
 
-          generatedNotes += `  - Purchase ${index + 1}: ${alloc.amount} ${formData.unit} @ $${costBasisPerUnit.toFixed(2)} = $${alloc.costBasis.toFixed(2)}\n`;
+          text += `  - Purchase ${index + 1}: ${alloc.amount} ${unit} @ $${costBasisPerUnit.toFixed(2)} = $${alloc.costBasis.toFixed(2)}\n`;
         }
       });
 
-      generatedNotes += `Total Cost Basis: $${totalCostBasis.toFixed(2)}\n`;
+      text += `Total Cost Basis: $${totalCostBasis.toFixed(2)}\n`;
+      return text;
     } else if (allocations.length === 1 && allocations[0].purchase) {
       const purchase = allocations[0].purchase;
       const costBasisPerUnit =
         purchase.effectivePricePerUnit || purchase.pricePerUnit;
 
-      generatedNotes += `Cost Basis: ${totalAmount} ${formData.unit} @ $${costBasisPerUnit.toFixed(2)} = $${totalCostBasis.toFixed(2)}\n`;
+      return `Cost Basis: ${totalAmount} ${unit} @ $${costBasisPerUnit.toFixed(2)} = $${totalCostBasis.toFixed(2)}\n`;
     }
+    
+    return '';
+  };
 
+  // Helper function to generate fees text
+  const generateFeesText = (
+    shippingCost: number,
+    sellerFee: number,
+    paymentProcessingFee: number,
+    otherFee: number,
+    totalFees: number,
+    otherFeeName: string
+  ): string => {
     if (totalFees > 0) {
-      generatedNotes += `Fees:\n`;
+      let text = `Fees:\n`;
       if (shippingCost > 0)
-        generatedNotes += `  - Shipping: $${shippingCost.toFixed(2)}\n`;
+        text += `  - Shipping: $${shippingCost.toFixed(2)}\n`;
       if (sellerFee > 0)
-        generatedNotes += `  - Seller Fee: $${sellerFee.toFixed(2)}\n`;
+        text += `  - Seller Fee: $${sellerFee.toFixed(2)}\n`;
       if (paymentProcessingFee > 0)
-        generatedNotes += `  - Payment Processing: $${paymentProcessingFee.toFixed(2)}\n`;
+        text += `  - Payment Processing: $${paymentProcessingFee.toFixed(2)}\n`;
       if (otherFee > 0)
-        generatedNotes += `  - ${formData.otherFeeName || "Other Fee"}: $${otherFee.toFixed(2)}\n`;
-      generatedNotes += `Total Fees: $${totalFees.toFixed(2)}\n`;
+        text += `  - ${otherFeeName || "Other Fee"}: $${otherFee.toFixed(2)}\n`;
+      text += `Total Fees: $${totalFees.toFixed(2)}\n`;
+      return text;
     }
+    return '';
+  };
 
-    const profitPercentage =
-      totalCostBasis > 0 ? (profit / totalCostBasis) * 100 : 0;
-    generatedNotes += `Net Profit: $${profit.toFixed(2)} (${profitPercentage.toFixed(2)}% ROI)`;
-
-    // Update notes
-    formData.notes = userNotes
-      ? `${userNotes}\n\n${generatedNotes}`
-      : generatedNotes;
+  // Helper function to generate profit text
+  const generateProfitText = (profit: number, totalCostBasis: number): string => {
+    const profitPercentage = totalCostBasis > 0 ? (profit / totalCostBasis) * 100 : 0;
+    return `Net Profit: $${profit.toFixed(2)} (${profitPercentage.toFixed(2)}% ROI)`;
   };
 
   // Update profit calculation when relevant form fields change
@@ -312,6 +359,9 @@ export default function SalesPage() {
     formData.paymentProcessingFee,
     formData.otherFee,
     formData.otherFeeAmount,
+    formData.otherFeeName,
+    formData.unit,
+    updateCalculatedProfit
   ]);
 
   // Calculate total cost basis from all allocations
@@ -357,7 +407,7 @@ export default function SalesPage() {
       const availableAmount = getAvailableAmount(alloc.purchaseId);
       if (alloc.amount > availableAmount) {
         alert(
-          `You can only sell up to ${availableAmount} ${formData.unit} from purchase dated ${alloc.purchase?.date.toLocaleDateString()}`,
+          `You can only sell up to ${availableAmount} ${formData.unit} from purchase dated ${alloc.purchase?.date.toLocaleDateString()}`
         );
         return;
       }
@@ -406,7 +456,7 @@ export default function SalesPage() {
       unit: formData.unit,
       pricePerUnit,
       currency: formData.currency,
-      buyer: formData.buyer,
+      orderNumber: formData.orderNumber,
       notes: formData.notes,
       totalPrice,
       originalPurchasePrice: validAllocations.reduce(
@@ -435,7 +485,7 @@ export default function SalesPage() {
       unit: "oz" as GoldUnit,
       pricePerUnit: "",
       currency: "USD" as Currency,
-      buyer: "",
+      orderNumber: "",
       notes: "",
       userEnteredNotes: "",
       shippingCost: "",
@@ -483,12 +533,12 @@ export default function SalesPage() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                Buyer
+                Order Number
               </label>
               <input
                 type="text"
-                name="buyer"
-                value={formData.buyer}
+                name="orderNumber"
+                value={formData.orderNumber}
                 onChange={handleChange}
                 placeholder="Dealer, Individual, etc."
                 className="form-input"
@@ -627,7 +677,7 @@ export default function SalesPage() {
                         >
                           {purchase.date.toLocaleDateString()} -{" "}
                           {purchase.amount} {purchase.unit} from{" "}
-                          {purchase.source}
+                          {purchase.source || "Unknown"}
                           (Available:{" "}
                           {getAvailableAmount(purchase.id).toFixed(3)}{" "}
                           {purchase.unit})
@@ -893,7 +943,7 @@ export default function SalesPage() {
                     Date
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Buyer
+                    Order Number
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Amount
@@ -919,7 +969,7 @@ export default function SalesPage() {
                       {sale.date.toLocaleDateString()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {sale.buyer}
+                      {sale.orderNumber}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {sale.amount} {sale.unit}

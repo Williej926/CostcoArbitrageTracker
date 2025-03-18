@@ -25,38 +25,38 @@ export interface Purchase {
 }
 
 export interface PurchaseAllocationRecord {
-    purchaseId: string;
-    purchaseDate: Date;
-    amount: number;
-    costBasisPerUnit: number;
-    costBasis: number;
-  }
-  
-  export interface Sale {
-    id: string;                        // Unique identifier for the sale
-    date: Date;                        // When the sale occurred
-    amount: number;                    // Total amount of gold sold
-    unit: GoldUnit;                    // oz, g, kg
-    pricePerUnit: number;              // Sale price per unit
-    currency: Currency;                // USD, EUR, GBP
-    orderNumber: string;               // Pure order #
-    notes?: string;                    // Any additional notes
-    totalPrice: number;                // amount * pricePerUnit
-    
-    // Financial calculations
-    originalPurchasePrice: number;     // What you paid for this amount at list price
-    effectivePurchasePrice: number;    // Original price minus discounts (your cost basis)
-    fees: number;                      // Total fees associated with the sale
-    profit: number;                    // Sale price minus effective purchase price minus fees
-    profitPercentage: number;          // (profit / effectivePurchasePrice) * 100
-    
-    // Multi-purchase support
-    purchaseAllocations?: PurchaseAllocationRecord[]; // Records of which purchases this sale came from
-    
-    // For backward compatibility with single-purchase model
-    purchaseId?: string;               // Reference to original purchase (legacy field)
-    purchaseDate?: Date;               // Date of the original purchase (legacy field)
-  }
+  purchaseId: string;
+  purchaseDate: Date;
+  amount: number;
+  costBasisPerUnit: number;
+  costBasis: number;
+}
+
+export interface Sale {
+  id: string; // Unique identifier for the sale
+  date: Date; // When the sale occurred
+  amount: number; // Total amount of gold sold
+  unit: GoldUnit; // oz, g, kg
+  pricePerUnit: number; // Sale price per unit
+  currency: Currency; // USD, EUR, GBP
+  orderNumber: string; // Pure order #
+  notes?: string; // Any additional notes
+  totalPrice: number; // amount * pricePerUnit
+
+  // Financial calculations
+  originalPurchasePrice: number; // What you paid for this amount at list price
+  effectivePurchasePrice: number; // Original price minus discounts (your cost basis)
+  fees: number; // Total fees associated with the sale
+  profit: number; // Sale price minus effective purchase price minus fees
+  profitPercentage: number; // (profit / effectivePurchasePrice) * 100
+
+  // Multi-purchase support
+  purchaseAllocations?: PurchaseAllocationRecord[]; // Records of which purchases this sale came from
+
+  // For backward compatibility with single-purchase model
+  purchaseId?: string; // Reference to original purchase (legacy field)
+  purchaseDate?: Date; // Date of the original purchase (legacy field)
+}
 export interface GoldPrice {
   date: Date;
   pricePerOz: number;
@@ -70,7 +70,6 @@ export interface UserSettings {
 }
 
 export interface PureProduct {
-    id: string;
-    name: string;
-    weight: string;
-  }
+  id: string;
+  name: string;
+}
