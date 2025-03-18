@@ -95,16 +95,16 @@ export default function PurchasesPage() {
   const calculateEffectivePrice = (basePrice: number): number => {
     let effectivePrice = basePrice;
     let discountDetails = [];
-    
+
     // Get only user-entered notes (excluding any previously generated notes)
     // This is a key change - we need to track user notes separately
     const userEnteredNotes = formData.userEnteredNotes || ""; // Use a separate field for user's actual notes
-    
+
     // Apply payment method discounts
     const selectedMethods = Object.keys(formData.paymentMethods).filter(
       (method) => formData.paymentMethods[method],
     );
-  
+
     for (const method of selectedMethods) {
       const discountRate = paymentMethodDiscounts[method] || 0;
       if (discountRate > 0) {
@@ -115,7 +115,7 @@ export default function PurchasesPage() {
         );
       }
     }
-  
+
     // Apply Kasheesh fee if used
     if (formData.usedKasheesh) {
       const kasheeshRate = 0.02;
@@ -123,7 +123,7 @@ export default function PurchasesPage() {
       effectivePrice += kasheeshAmount;
       discountDetails.push(`Kasheesh: 2% fee (+$${kasheeshAmount.toFixed(2)})`);
     }
-  
+
     // Apply executive membership discount
     if (formData.hasExecutiveMembership) {
       const execDiscountRate = 0.02;
@@ -133,7 +133,7 @@ export default function PurchasesPage() {
         `Executive membership: 2% (-$${execDiscountAmount.toFixed(2)})`,
       );
     }
-  
+
     // Apply other discount if applicable
     if (formData.otherDiscount && formData.otherDiscountRate) {
       const otherRate = parseFloat(formData.otherDiscountRate) / 100;
@@ -143,15 +143,15 @@ export default function PurchasesPage() {
         `${formData.otherDiscountName || "Other discount"}: ${formData.otherDiscountRate}% (-$${otherAmount.toFixed(2)})`,
       );
     }
-  
+
     // Generate new notes based on current state
     let generatedNotes = "";
-  
+
     // Add discount details to notes if any were applied
     if (discountDetails.length > 0) {
       generatedNotes += `Applied discounts: ${discountDetails.join(", ")}. Original price: $${basePrice.toFixed(2)}`;
     }
-  
+
     // Add payment methods to notes
     if (selectedMethods.length > 0) {
       const paymentMethodNote = `Payment methods: ${selectedMethods
@@ -161,25 +161,37 @@ export default function PurchasesPage() {
             : method,
         )
         .join(", ")}`;
-  
+
       if (generatedNotes) {
         generatedNotes += "\n" + paymentMethodNote;
       } else {
         generatedNotes = paymentMethodNote;
       }
     }
-  
+
     // Combine user notes with freshly generated notes
     if (generatedNotes) {
-      formData.notes = userEnteredNotes ? userEnteredNotes + "\n\n" + generatedNotes : generatedNotes;
+      formData.notes = userEnteredNotes
+        ? userEnteredNotes + "\n\n" + generatedNotes
+        : generatedNotes;
     } else {
       formData.notes = userEnteredNotes;
     }
-    
+
     return effectivePrice;
   };
   useEffect(() => {
     updateCalculatedPrice();
+    const savedPurchases = localStorage.getItem("goldPurchases");
+    if (savedPurchases) {
+      // Convert string dates back to Date objects
+      const parsedPurchases = JSON.parse(savedPurchases);
+      const purchasesWithDates = parsedPurchases.map((purchase) => ({
+        ...purchase,
+        date: new Date(purchase.date),
+      }));
+      setPurchases(purchasesWithDates);
+    }
   }, [
     formData.amount,
     formData.pricePerUnit,
@@ -225,8 +237,9 @@ export default function PurchasesPage() {
       discountsApplied: baseTotalPrice !== effectiveTotalPrice,
       paymentMethods: formData.paymentMethods,
     };
-
-    setPurchases([newPurchase, ...purchases]);
+    const updatedPurchases = [newPurchase, ...purchases];
+    setPurchases(updatedPurchases);
+    localStorage.setItem("goldPurchases", JSON.stringify(updatedPurchases));
 
     // Reset form
     setFormData({
@@ -262,7 +275,9 @@ export default function PurchasesPage() {
 
       {/* Purchase Form */}
       <div className="bg-white p-6 rounded-lg shadow-md">
-        <h2 className="text-xl font-semibold mb-4 text-gray-700" >Add New Purchase</h2>
+        <h2 className="text-xl font-semibold mb-4 text-gray-700">
+          Add New Purchase
+        </h2>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -784,9 +799,19 @@ export default function PurchasesPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                       {purchase.discountsApplied ? (
-                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                          Applied
-                        </span>
+                        <>
+                          <span
+                            className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                              purchase.totalPrice > purchase.effectiveTotalPrice
+                                ? "bg-green-100 text-green-800"
+                                : "bg-red-100 text-red-800"
+                            }`}
+                          >
+                            {purchase.totalPrice > purchase.effectiveTotalPrice
+                              ? `Saved $${(purchase.totalPrice - purchase.effectiveTotalPrice).toFixed(2)}`
+                              : `Cost $${(purchase.effectiveTotalPrice - purchase.totalPrice).toFixed(2)} more`}
+                          </span>
+                        </>
                       ) : (
                         <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
                           None
