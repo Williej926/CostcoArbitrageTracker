@@ -676,8 +676,7 @@ export default function SalesPage() {
                           )}
                         >
                           {purchase.date.toLocaleDateString()} -{" "}
-                          {purchase.amount} {purchase.unit} from{" "}
-                          {purchase.source || "Unknown"}
+                          {purchase.productName}
                           (Available:{" "}
                           {getAvailableAmount(purchase.id).toFixed(3)}{" "}
                           {purchase.unit})
@@ -696,8 +695,8 @@ export default function SalesPage() {
                       onChange={(e) =>
                         handleAllocationChange(index, "amount", e.target.value)
                       }
-                      step="0.001"
-                      min="0.001"
+                      step="1"
+                      min="1"
                       max={
                         allocation.purchase
                           ? getAvailableAmount(allocation.purchaseId)
