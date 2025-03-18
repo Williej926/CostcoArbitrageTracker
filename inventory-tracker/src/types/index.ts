@@ -72,4 +72,5 @@ export interface UserSettings {
 export interface PureProduct {
     id: string;
     name: string;
+    weight: string;
   }

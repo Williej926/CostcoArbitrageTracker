@@ -5,12 +5,13 @@ import { useState, useEffect } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { Purchase, GoldUnit, Currency } from "@/types";
 import ProductSelector from "@/components/ProductSelector";
-import { getProducts } from "@/hooks/getProducts";
+import { getProducts } from "@/utils/productStorage";
+import { getFeeSettings } from '@/utils/feeSettings';
 
 export default function PurchasesPage() {
   const [calculatedPrice, setCalculatedPrice] = useState<number | null>(null);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
-  const { products, loading, error } = getProducts();
+  const [products, setProducts] = useState([]);
   
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split("T")[0],
@@ -50,6 +51,7 @@ export default function PurchasesPage() {
   
   // Load purchases from localStorage on component mount
   useEffect(() => {
+    setProducts(getProducts());
     const savedPurchases = localStorage.getItem('goldPurchases');
     if (savedPurchases) {
       const parsedPurchases = JSON.parse(savedPurchases);
@@ -144,10 +146,10 @@ export default function PurchasesPage() {
     
     // Apply Kasheesh fee if used
     if (formData.usedKasheesh) {
-      const kasheeshRate = 0.02;
-      const kasheeshAmount = basePrice * kasheeshRate;
-      effectivePrice += kasheeshAmount;
-      discountDetails.push(`Kasheesh: 2% fee (+$${kasheeshAmount.toFixed(2)})`);
+        const { kasheeshFee } = getFeeSettings();
+        const kasheeshAmount = basePrice * kasheeshFee;
+        effectivePrice += kasheeshAmount;
+        discountDetails.push(`Kasheesh: ${(kasheeshFee * 100).toFixed(2)}% fee (+$${kasheeshAmount.toFixed(2)})`);
     }
     
     // Apply executive membership discount
@@ -391,7 +393,7 @@ export default function PurchasesPage() {
                 name="quantity"
                 value={formData.quantity}
                 onChange={handleChange}
-                min="0.001"
+                min="1"
                 step="1"
                 placeholder="1"
                 className="form-input"
@@ -727,7 +729,7 @@ export default function PurchasesPage() {
                       htmlFor="usedKasheesh"
                       className="font-medium text-gray-700"
                     >
-                      Kasheesh (2% fee)
+                      Kasheesh
                     </label>
                     <p className="text-gray-500">Applied Kasheesh processing fee</p>
                   </div>
