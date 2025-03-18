@@ -223,14 +223,20 @@ export default function PurchasesPage() {
 
   // Update calculated price when relevant fields change
   useEffect(() => {
-    if (!formData.pricePerUnit || !formData.quantity || !formData.amount) {
+    if (!formData.pricePerUnit || !formData.quantity) {
       setCalculatedPrice(null);
       return;
     }
 
     const quantity = parseFloat(formData.quantity);
     const pricePerUnit = parseFloat(formData.pricePerUnit);
-    const amount = parseFloat(formData.amount);
+    if (formData.amount !== formData.quantity) {
+        setFormData(prev => ({
+          ...prev,
+          amount: formData.quantity
+        }));
+      }
+    const amount = parseFloat(formData.amount); // Define amount variable
 
     if (isNaN(quantity) || isNaN(pricePerUnit) || isNaN(amount)) {
       setCalculatedPrice(null);
@@ -245,8 +251,8 @@ export default function PurchasesPage() {
     setCalculatedPrice(effectivePrice);
   }, [
     formData.productId,
-    formData.quantity,
     formData.amount,
+    formData.quantity,
     formData.pricePerUnit,
     formData.paymentMethods,
     formData.usedKasheesh,
@@ -267,7 +273,7 @@ export default function PurchasesPage() {
 
     const quantity = parseFloat(formData.quantity);
     const pricePerUnit = parseFloat(formData.pricePerUnit);
-    const amount = parseFloat(formData.amount);
+    const amount = parseFloat(formData.quantity);
 
     if (isNaN(quantity) || isNaN(pricePerUnit) || isNaN(amount)) {
       alert("Please enter valid numbers for quantity, amount, and price");
@@ -413,21 +419,21 @@ export default function PurchasesPage() {
 
             {/* Amount */}
             <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Amount
-              </label>
-              <input
-                type="number"
-                name="amount"
-                value={formData.amount}
-                onChange={handleChange}
-                step="0.001"
-                min="0"
-                placeholder="1.0"
-                className="form-input"
-                required
-              />
-            </div>
+  <label className="block text-sm font-medium text-gray-700">
+    Amount
+  </label>
+  <input
+    type="number"
+    name="amount"
+    value={formData.amount}
+    readOnly
+    className="form-input bg-gray-100" // Add background to indicate it's not editable
+    required
+  />
+  <p className="text-xs text-gray-500 mt-1">
+    Amount automatically matches quantity
+  </p>
+</div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700">
