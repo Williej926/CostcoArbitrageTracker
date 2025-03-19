@@ -6,7 +6,7 @@ export interface FeeSettings {
 
 const DEFAULT_SETTINGS: FeeSettings = {
   kasheeshFee: 0.01, // Default 1%
-  pureFee: 0.00075, // Default 0.075%
+  pureFee: 0.0075, // Default 0.75%
 };
 
 const FEE_SETTINGS_KEY = "goldArbitrage_feeSettings";

@@ -1,9 +1,11 @@
 // src/app/sales/page.tsx
 "use client";
-
+import { getFeeSettings } from "@/utils/feeSettings";
 import { useState, useEffect } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { Sale, Purchase, GoldUnit, Currency } from "@/types";
+
+const { pureFee } = getFeeSettings();
 
 // Define a type for purchase allocations
 interface PurchaseAllocation {
@@ -49,7 +51,7 @@ export default function SalesPage() {
 
     // Additional fees
     shippingCost: "",
-    sellerFee: "",
+    sellerFee: "",    
     paymentProcessingFee: "",
     otherFee: false,
     otherFeeName: "",
@@ -255,7 +257,7 @@ export default function SalesPage() {
 
     // Calculate fees
     const shippingCost = parseFloat(formData.shippingCost) || 0;
-    const sellerFee = parseFloat(formData.sellerFee) || 0;
+    const sellerFee = pureFee * totalAmount * salePricePerUnit; // Calculate based on percentage of sale value
     const paymentProcessingFee = parseFloat(formData.paymentProcessingFee) || 0;
     const otherFee = formData.otherFee
       ? parseFloat(formData.otherFeeAmount) || 0
@@ -316,7 +318,6 @@ export default function SalesPage() {
     
     return '';
   };
-
   // Helper function to generate fees text
   const generateFeesText = (
     shippingCost: number,
@@ -329,14 +330,15 @@ export default function SalesPage() {
     if (totalFees > 0) {
       let text = `Fees:\n`;
       if (shippingCost > 0)
-        text += `  - Shipping: $${shippingCost.toFixed(2)}\n`;
+        text += `  - Shipping: ${shippingCost.toFixed(2)}\n`;
+      // Modified seller fee to show percentage
       if (sellerFee > 0)
-        text += `  - Seller Fee: $${sellerFee.toFixed(2)}\n`;
+        text += `  - Seller Fee (${(pureFee * 100).toFixed(2)}%): ${sellerFee.toFixed(2)}\n`;
       if (paymentProcessingFee > 0)
-        text += `  - Payment Processing: $${paymentProcessingFee.toFixed(2)}\n`;
+        text += `  - Payment Processing: ${paymentProcessingFee.toFixed(2)}\n`;
       if (otherFee > 0)
-        text += `  - ${otherFeeName || "Other Fee"}: $${otherFee.toFixed(2)}\n`;
-      text += `Total Fees: $${totalFees.toFixed(2)}\n`;
+        text += `  - ${otherFeeName || "Other Fee"}: ${otherFee.toFixed(2)}\n`;
+      text += `Total Fees: ${totalFees.toFixed(2)}\n`;
       return text;
     }
     return '';
@@ -363,7 +365,15 @@ export default function SalesPage() {
     formData.unit,
     updateCalculatedProfit
   ]);
-
+// Ensure sellerFee always matches pureFee
+useEffect(() => {
+    if (formData.sellerFee !== pureFee.toString()) {
+      setFormData(prev => ({
+        ...prev,
+        sellerFee: ""
+      }));
+    }
+  }, [formData.sellerFee, pureFee]);
   // Calculate total cost basis from all allocations
   const getTotalCostBasis = () => {
     return allocations.reduce((sum, alloc) => sum + alloc.costBasis, 0);
@@ -415,7 +425,7 @@ export default function SalesPage() {
 
     // Calculate fees
     const shippingCost = parseFloat(formData.shippingCost) || 0;
-    const sellerFee = parseFloat(formData.sellerFee) || 0;
+    const sellerFee = pureFee * totalAmount * pricePerUnit; // Calculate as percentage of sale value
     const paymentProcessingFee = parseFloat(formData.paymentProcessingFee) || 0;
     const otherFee = formData.otherFee
       ? parseFloat(formData.otherFeeAmount) || 0
@@ -756,22 +766,28 @@ export default function SalesPage() {
                   className="form-input"
                 />
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Seller Fee
-                </label>
-                <input
-                  type="number"
-                  name="sellerFee"
-                  value={formData.sellerFee}
-                  onChange={handleChange}
-                  step="0.01"
-                  min="0"
-                  placeholder="0.00"
-                  className="form-input"
-                />
-              </div>
+  <label className="block text-sm font-medium text-gray-700">
+    Seller Fee
+  </label>
+  <div className="relative">
+    <input
+      type="text"
+      name="sellerFee"
+      value={`${(pureFee * 100).toFixed(2)}%`}
+      readOnly={true}
+      className="form-input bg-gray-100"
+    />
+    {parseFloat(formData.pricePerUnit) > 0 && parseFloat(formData.amount) > 0 && (
+      <div className="absolute right-0 top-0 h-full flex items-center pr-3 text-sm text-gray-500">
+        ≈ ${(pureFee * parseFloat(formData.pricePerUnit) * parseFloat(formData.amount)).toFixed(2)}
+      </div>
+    )}
+  </div>
+  <p className="text-xs text-gray-500 mt-1">
+    Fixed at {(pureFee * 100).toFixed(2)}% of sale value
+  </p>
+</div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700">
