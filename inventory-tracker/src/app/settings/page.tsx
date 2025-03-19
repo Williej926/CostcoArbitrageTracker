@@ -23,10 +23,10 @@ const KASHEESH_FEE_OPTIONS = [
 ];
 
 const PURE_FEE_OPTIONS = [
-  { label: "0.075% (Default)", value: 0.00075 },
-  { label: "0.070%", value: 0.0007 },
-  { label: "0.063%", value: 0.00063 },
-  { label: "0.050%", value: 0.0005 },
+  { label: "0.75% (Default)", value: 0.0075 },
+  { label: "0.70%", value: 0.007 },
+  { label: "0.63%", value: 0.0063 },
+  { label: "0.50%", value: 0.005 },
 ];
 
 // Local storage keys
