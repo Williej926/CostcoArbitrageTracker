@@ -16,11 +16,11 @@ interface PurchaseAllocation {
 }
 
 // Create an interface for parsed purchases/sales from localStorage
-interface ParsedPurchase extends Omit<Purchase, 'date'> {
+interface ParsedPurchase extends Omit<Purchase, "date"> {
   date: string;
 }
 
-interface ParsedSale extends Omit<Sale, 'date' | 'purchaseAllocations'> {
+interface ParsedSale extends Omit<Sale, "date" | "purchaseAllocations"> {
   date: string;
   purchaseAllocations?: Array<{
     purchaseId: string;
@@ -39,6 +39,8 @@ export default function SalesPage() {
   const [sales, setSales] = useState<Sale[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [allocations, setAllocations] = useState<PurchaseAllocation[]>([]);
+  const [editingSale, setEditingSale] = useState<Sale | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split("T")[0],
     amount: "",
@@ -51,13 +53,12 @@ export default function SalesPage() {
 
     // Additional fees
     shippingCost: "",
-    sellerFee: "",    
+    sellerFee: "",
     paymentProcessingFee: "",
     otherFee: false,
     otherFeeName: "",
     otherFeeAmount: "",
   });
-
   // Load purchases and sales when component mounts
   useEffect(() => {
     // Load purchases from localStorage
@@ -127,7 +128,103 @@ export default function SalesPage() {
       });
     }
   };
+  // Function to start editing a sale
+  const handleEditSale = (sale: Sale) => {
+    setEditingSale(sale);
+    setIsEditing(true);
 
+    // Convert date to ISO string format for the date input
+    const dateString =
+      sale.date instanceof Date
+        ? sale.date.toISOString().split("T")[0]
+        : new Date(sale.date).toISOString().split("T")[0];
+
+    // Set form data with the sale details
+    setFormData({
+      date: dateString,
+      amount: sale.amount.toString(),
+      unit: sale.unit || ("oz" as GoldUnit),
+      pricePerUnit: sale.pricePerUnit.toString(),
+      currency: sale.currency || ("USD" as Currency),
+      orderNumber: sale.orderNumber || "",
+      notes: sale.notes || "",
+      userEnteredNotes: sale.notes || "",
+      shippingCost: sale.fees ? (sale.fees / 4).toString() : "", // Estimate, since we don't have the breakdown
+      sellerFee: "",
+      paymentProcessingFee: "",
+      otherFee: false,
+      otherFeeName: "",
+      otherFeeAmount: "",
+    });
+
+    // Set allocations based on sale's purchase allocations
+    if (sale.purchaseAllocations && sale.purchaseAllocations.length > 0) {
+      const newAllocations = sale.purchaseAllocations.map((alloc) => {
+        const purchase =
+          purchases.find((p) => p.id === alloc.purchaseId) || null;
+        return {
+          purchaseId: alloc.purchaseId,
+          purchase,
+          amount: alloc.amount,
+          costBasis: alloc.costBasis,
+        };
+      });
+      setAllocations(newAllocations);
+    }
+
+    // Scroll to the form
+    document
+      .querySelector(".bg-white.p-6.rounded-lg.shadow-md")
+      ?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  // Function to cancel editing
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setEditingSale(null);
+
+    // Reset form to default values
+    setFormData({
+      date: new Date().toISOString().split("T")[0],
+      amount: "",
+      unit: "oz" as GoldUnit,
+      pricePerUnit: "",
+      currency: "USD" as Currency,
+      orderNumber: "",
+      notes: "",
+      userEnteredNotes: "",
+      shippingCost: "",
+      sellerFee: "",
+      paymentProcessingFee: "",
+      otherFee: false,
+      otherFeeName: "",
+      otherFeeAmount: "",
+    });
+
+    // Reset allocations
+    setAllocations([
+      {
+        purchaseId: "",
+        purchase: null,
+        amount: 0,
+        costBasis: 0,
+      },
+    ]);
+  };
+
+  // Function to delete a sale
+  const handleDeleteSale = (saleId: string) => {
+    if (window.confirm("Are you sure you want to delete this sale?")) {
+      const updatedSales = sales.filter((s) => s.id !== saleId);
+      setSales(updatedSales);
+      localStorage.setItem("goldSales", JSON.stringify(updatedSales));
+
+      // If we're currently editing this sale, cancel the edit
+      if (editingSale && editingSale.id === saleId) {
+        handleCancelEdit();
+      }
+    }
+  };
   // Calculate available amount that can be sold from a specific purchase
   const getAvailableAmount = (purchaseId: string) => {
     if (!purchaseId) return 0;
@@ -153,7 +250,11 @@ export default function SalesPage() {
   };
 
   // Handle changes to a purchase allocation
-  const handleAllocationChange = (index: number, field: AllocationField, value: string) => {
+  const handleAllocationChange = (
+    index: number,
+    field: AllocationField,
+    value: string,
+  ) => {
     const newAllocations = [...allocations];
 
     if (field === "purchaseId") {
@@ -227,7 +328,6 @@ export default function SalesPage() {
       return getAvailableAmount(purchase.id) > 0;
     });
   };
-
   // Calculate profit and update display
   const updateCalculatedProfit = () => {
     if (allocations.some((a) => !a.purchase) || !formData.pricePerUnit) {
@@ -274,10 +374,23 @@ export default function SalesPage() {
     const userNotes = formData.userEnteredNotes;
 
     // Generate profit details note
-    const generatedNotes = `Profit Details:\n` +
+    const generatedNotes =
+      `Profit Details:\n` +
       `Sale Amount: ${totalAmount} ${formData.unit} @ $${salePricePerUnit.toFixed(2)} = $${saleTotal.toFixed(2)}\n` +
-      generateCostBasisText(allocations, totalAmount, totalCostBasis, formData.unit) +
-      generateFeesText(shippingCost, sellerFee, paymentProcessingFee, otherFee, totalFees, formData.otherFeeName) +
+      generateCostBasisText(
+        allocations,
+        totalAmount,
+        totalCostBasis,
+        formData.unit,
+      ) +
+      generateFeesText(
+        shippingCost,
+        sellerFee,
+        paymentProcessingFee,
+        otherFee,
+        totalFees,
+        formData.otherFeeName,
+      ) +
       generateProfitText(profit, totalCostBasis);
 
     // Update notes
@@ -291,7 +404,7 @@ export default function SalesPage() {
     allocations: PurchaseAllocation[],
     totalAmount: number,
     totalCostBasis: number,
-    unit: GoldUnit
+    unit: GoldUnit,
   ): string => {
     if (allocations.length > 1) {
       let text = `Cost Basis Details:\n`;
@@ -315,8 +428,8 @@ export default function SalesPage() {
 
       return `Cost Basis: ${totalAmount} ${unit} @ $${costBasisPerUnit.toFixed(2)} = $${totalCostBasis.toFixed(2)}\n`;
     }
-    
-    return '';
+
+    return "";
   };
   // Helper function to generate fees text
   const generateFeesText = (
@@ -325,7 +438,7 @@ export default function SalesPage() {
     paymentProcessingFee: number,
     otherFee: number,
     totalFees: number,
-    otherFeeName: string
+    otherFeeName: string,
   ): string => {
     if (totalFees > 0) {
       let text = `Fees:\n`;
@@ -341,15 +454,18 @@ export default function SalesPage() {
       text += `Total Fees: ${totalFees.toFixed(2)}\n`;
       return text;
     }
-    return '';
+    return "";
   };
 
   // Helper function to generate profit text
-  const generateProfitText = (profit: number, totalCostBasis: number): string => {
-    const profitPercentage = totalCostBasis > 0 ? (profit / totalCostBasis) * 100 : 0;
+  const generateProfitText = (
+    profit: number,
+    totalCostBasis: number,
+  ): string => {
+    const profitPercentage =
+      totalCostBasis > 0 ? (profit / totalCostBasis) * 100 : 0;
     return `Net Profit: $${profit.toFixed(2)} (${profitPercentage.toFixed(2)}% ROI)`;
   };
-
   // Update profit calculation when relevant form fields change
   useEffect(() => {
     updateCalculatedProfit();
@@ -363,17 +479,18 @@ export default function SalesPage() {
     formData.otherFeeAmount,
     formData.otherFeeName,
     formData.unit,
-    updateCalculatedProfit
   ]);
-// Ensure sellerFee always matches pureFee
-useEffect(() => {
+
+  // Ensure sellerFee always matches pureFee
+  useEffect(() => {
     if (formData.sellerFee !== pureFee.toString()) {
-      setFormData(prev => ({
+      setFormData((prev) => ({
         ...prev,
-        sellerFee: ""
+        sellerFee: "",
       }));
     }
   }, [formData.sellerFee, pureFee]);
+
   // Calculate total cost basis from all allocations
   const getTotalCostBasis = () => {
     return allocations.reduce((sum, alloc) => sum + alloc.costBasis, 0);
@@ -414,15 +531,25 @@ useEffect(() => {
 
     // Validate that each allocation doesn't exceed available amount
     for (const alloc of validAllocations) {
+      // Skip validation for the current sale's allocations if editing
+      if (
+        isEditing &&
+        editingSale &&
+        editingSale.purchaseAllocations?.some(
+          (a) => a.purchaseId === alloc.purchaseId,
+        )
+      ) {
+        continue;
+      }
+
       const availableAmount = getAvailableAmount(alloc.purchaseId);
       if (alloc.amount > availableAmount) {
         alert(
-          `You can only sell up to ${availableAmount} ${formData.unit} from purchase dated ${alloc.purchase?.date.toLocaleDateString()}`
+          `You can only sell up to ${availableAmount} ${formData.unit} from purchase dated ${alloc.purchase?.date.toLocaleDateString()}`,
         );
         return;
       }
     }
-
     // Calculate fees
     const shippingCost = parseFloat(formData.shippingCost) || 0;
     const sellerFee = pureFee * totalAmount * pricePerUnit; // Calculate as percentage of sale value
@@ -459,34 +586,73 @@ useEffect(() => {
       };
     });
 
-    const newSale: Sale = {
-      id: uuidv4(),
-      date: new Date(formData.date),
-      amount: totalAmount,
-      unit: formData.unit,
-      pricePerUnit,
-      currency: formData.currency,
-      orderNumber: formData.orderNumber,
-      notes: formData.notes,
-      totalPrice,
-      originalPurchasePrice: validAllocations.reduce(
-        (sum, alloc) =>
-          sum + alloc.amount * (alloc.purchase?.pricePerUnit || 0),
-        0,
-      ),
-      effectivePurchasePrice: totalCostBasis,
-      fees: totalFees,
-      profit,
-      profitPercentage,
-      purchaseAllocations,
-    };
+    let updatedSales;
+
+    if (isEditing && editingSale) {
+      // Update existing sale
+      const updatedSale: Sale = {
+        ...editingSale,
+        date: new Date(formData.date),
+        amount: totalAmount,
+        unit: formData.unit,
+        pricePerUnit,
+        currency: formData.currency,
+        orderNumber: formData.orderNumber,
+        notes: formData.notes,
+        totalPrice,
+        originalPurchasePrice: validAllocations.reduce(
+          (sum, alloc) =>
+            sum + alloc.amount * (alloc.purchase?.pricePerUnit || 0),
+          0,
+        ),
+        effectivePurchasePrice: totalCostBasis,
+        fees: totalFees,
+        profit,
+        profitPercentage,
+        purchaseAllocations,
+      };
+
+      // Replace the old sale with the updated one
+      updatedSales = sales.map((s) =>
+        s.id === editingSale.id ? updatedSale : s,
+      );
+    } else {
+      // Create new sale
+      const newSale: Sale = {
+        id: uuidv4(),
+        date: new Date(formData.date),
+        amount: totalAmount,
+        unit: formData.unit,
+        pricePerUnit,
+        currency: formData.currency,
+        orderNumber: formData.orderNumber,
+        notes: formData.notes,
+        totalPrice,
+        originalPurchasePrice: validAllocations.reduce(
+          (sum, alloc) =>
+            sum + alloc.amount * (alloc.purchase?.pricePerUnit || 0),
+          0,
+        ),
+        effectivePurchasePrice: totalCostBasis,
+        fees: totalFees,
+        profit,
+        profitPercentage,
+        purchaseAllocations,
+      };
+
+      // Add to sales array
+      updatedSales = [newSale, ...sales];
+    }
 
     // Update sales array
-    const updatedSales = [newSale, ...sales];
     setSales(updatedSales);
 
     // Save to localStorage
     localStorage.setItem("goldSales", JSON.stringify(updatedSales));
+
+    // Reset form and editing state
+    setIsEditing(false);
+    setEditingSale(null);
 
     // Reset form
     setFormData({
@@ -516,14 +682,15 @@ useEffect(() => {
       },
     ]);
   };
-
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-bold">Gold Sales</h1>
 
       {/* Sale Form */}
       <div className="bg-white p-6 rounded-lg shadow-md">
-        <h2 className="text-xl font-semibold mb-4 text-gray-700">Record New Sale</h2>
+        <h2 className="text-xl font-semibold mb-4 text-gray-700">
+          {isEditing ? "Edit Sale" : "Record New Sale"}
+        </h2>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -623,7 +790,6 @@ useEffect(() => {
               </p>
             </div>
           </div>
-
           {/* Purchase Allocations Section */}
           <div className="mt-6 border-t pt-6">
             <div className="flex justify-between items-center mb-4">
@@ -722,12 +888,15 @@ useEffect(() => {
                       required
                     />
                   </div>
-
                   {allocation.purchase && allocation.amount > 0 && (
                     <div className="md:col-span-2">
                       <div className="text-sm">
-                        <span className="font-medium text-gray-700 ml-2">Cost Basis: </span>
-                        <span className="text-gray-700 ml-2">${allocation.costBasis.toFixed(2)}</span>
+                        <span className="font-medium text-gray-700 ml-2">
+                          Cost Basis:{" "}
+                        </span>
+                        <span className="text-gray-700 ml-2">
+                          ${allocation.costBasis.toFixed(2)}
+                        </span>
                         <span className="text-gray-700 ml-2">
                           ({allocation.amount} {formData.unit} @ $
                           {(
@@ -743,7 +912,6 @@ useEffect(() => {
               </div>
             ))}
           </div>
-
           {/* Fees Section */}
           <div className="mt-6 border-t pt-6">
             <h3 className="text-lg font-medium text-gray-700 mb-4">
@@ -767,27 +935,33 @@ useEffect(() => {
                 />
               </div>
               <div>
-  <label className="block text-sm font-medium text-gray-700">
-    Seller Fee
-  </label>
-  <div className="relative">
-    <input
-      type="text"
-      name="sellerFee"
-      value={`${(pureFee * 100).toFixed(2)}%`}
-      readOnly={true}
-      className="form-input bg-gray-100"
-    />
-    {parseFloat(formData.pricePerUnit) > 0 && parseFloat(formData.amount) > 0 && (
-      <div className="absolute right-0 top-0 h-full flex items-center pr-3 text-sm text-gray-500">
-        ≈ ${(pureFee * parseFloat(formData.pricePerUnit) * parseFloat(formData.amount)).toFixed(2)}
-      </div>
-    )}
-  </div>
-  <p className="text-xs text-gray-500 mt-1">
-    Fixed at {(pureFee * 100).toFixed(2)}% of sale value
-  </p>
-</div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Seller Fee
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    name="sellerFee"
+                    value={`${(pureFee * 100).toFixed(2)}%`}
+                    readOnly={true}
+                    className="form-input bg-gray-100"
+                  />
+                  {parseFloat(formData.pricePerUnit) > 0 &&
+                    parseFloat(formData.amount) > 0 && (
+                      <div className="absolute right-0 top-0 h-full flex items-center pr-3 text-sm text-gray-500">
+                        ≈ $
+                        {(
+                          pureFee *
+                          parseFloat(formData.pricePerUnit) *
+                          parseFloat(formData.amount)
+                        ).toFixed(2)}
+                      </div>
+                    )}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Fixed at {(pureFee * 100).toFixed(2)}% of sale value
+                </p>
+              </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700">
@@ -862,7 +1036,6 @@ useEffect(() => {
                 </div>
               )}
             </div>
-
             {/* Profit Calculation Display */}
             <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
               <div className="flex justify-between items-center">
@@ -930,17 +1103,25 @@ useEffect(() => {
             />
           </div>
 
-          <div className="flex justify-end">
+          <div className="flex justify-end space-x-4">
+            {isEditing && (
+              <button
+                type="button"
+                onClick={handleCancelEdit}
+                className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              >
+                Cancel
+              </button>
+            )}
             <button
               type="submit"
               className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
             >
-              Record Sale
+              {isEditing ? "Update Sale" : "Record Sale"}
             </button>
           </div>
         </form>
       </div>
-
       {/* Sales History */}
       <div>
         <h2 className="text-xl font-semibold mb-4">Sales History</h2>
@@ -951,95 +1132,133 @@ useEffect(() => {
           </div>
         ) : (
           <div className="bg-white rounded-lg shadow-md overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Date
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Order Number
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Amount
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Sale Price
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Cost Basis
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Profit
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    ROI
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {sales.map((sale) => (
-                  <tr key={sale.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {sale.date.toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {sale.orderNumber}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {sale.amount} {sale.unit}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {sale.currency === "USD"
-                        ? "$"
-                        : sale.currency === "EUR"
-                          ? "€"
-                          : "£"}
-                      {sale.totalPrice.toFixed(2)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {sale.currency === "USD"
-                        ? "$"
-                        : sale.currency === "EUR"
-                          ? "€"
-                          : "£"}
-                      {sale.effectivePurchasePrice.toFixed(2)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <span
-                        className={`${
-                          sale.profit > 0
-                            ? "text-emerald-600"
-                            : sale.profit < 0
-                              ? "text-red-600"
-                              : "text-gray-500"
-                        }`}
-                      >
+            {/* This makes it scrollable */}
+            <div className="max-h-96 overflow-y-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                {/* Sticky header */}
+                <thead className="bg-gray-50 sticky top-0 z-10">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Date
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Order Number
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Amount
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Sale Price
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Cost Basis
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Profit
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      ROI
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {sales.map((sale) => (
+                    <tr
+                      key={sale.id}
+                      className="hover:bg-gray-50 cursor-pointer"
+                      onClick={() => handleEditSale(sale)}
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {sale.date instanceof Date
+                          ? sale.date.toLocaleDateString()
+                          : new Date(sale.date).toLocaleDateString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {sale.orderNumber}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {sale.amount} {sale.unit}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {sale.currency === "USD"
                           ? "$"
                           : sale.currency === "EUR"
                             ? "€"
                             : "£"}
-                        {sale.profit.toFixed(2)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <span
-                        className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          sale.profit > 0
-                            ? "bg-green-100 text-green-800"
-                            : sale.profit < 0
-                              ? "bg-red-100 text-red-800"
-                              : "bg-gray-100 text-gray-800"
-                        }`}
-                      >
-                        {sale.profitPercentage.toFixed(2)}%
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                        {sale.totalPrice.toFixed(2)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {sale.currency === "USD"
+                          ? "$"
+                          : sale.currency === "EUR"
+                            ? "€"
+                            : "£"}
+                        {sale.effectivePurchasePrice.toFixed(2)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <span
+                          className={`${
+                            sale.profit > 0
+                              ? "text-emerald-600"
+                              : sale.profit < 0
+                                ? "text-red-600"
+                                : "text-gray-500"
+                          }`}
+                        >
+                          {sale.currency === "USD"
+                            ? "$"
+                            : sale.currency === "EUR"
+                              ? "€"
+                              : "£"}
+                          {sale.profit.toFixed(2)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <span
+                          className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                            sale.profit > 0
+                              ? "bg-green-100 text-green-800"
+                              : sale.profit < 0
+                                ? "bg-red-100 text-red-800"
+                                : "bg-gray-100 text-gray-800"
+                          }`}
+                        >
+                          {sale.profitPercentage.toFixed(2)}%
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <div
+                          className="flex space-x-2"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditSale(sale);
+                            }}
+                            className="text-indigo-600 hover:text-indigo-900"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteSale(sale.id);
+                            }}
+                            className="text-red-600 hover:text-red-900"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>

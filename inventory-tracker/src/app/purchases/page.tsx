@@ -12,6 +12,8 @@ export default function PurchasesPage() {
   const [calculatedPrice, setCalculatedPrice] = useState<number | null>(null);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [products, setProducts] = useState<PureProduct[]>([]);
+  const [editingPurchase, setEditingPurchase] = useState<Purchase | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
 
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split("T")[0],
@@ -70,7 +72,6 @@ export default function PurchasesPage() {
       setPurchases(purchasesWithDates);
     }
   }, []);
-
   // Handle regular form changes
   const handleChange = (
     e: React.ChangeEvent<
@@ -231,11 +232,11 @@ export default function PurchasesPage() {
     const quantity = parseFloat(formData.quantity);
     const pricePerUnit = parseFloat(formData.pricePerUnit);
     if (formData.amount !== formData.quantity) {
-        setFormData(prev => ({
-          ...prev,
-          amount: formData.quantity
-        }));
-      }
+      setFormData((prev) => ({
+        ...prev,
+        amount: formData.quantity,
+      }));
+    }
     const amount = parseFloat(formData.amount); // Define amount variable
 
     if (isNaN(quantity) || isNaN(pricePerUnit) || isNaN(amount)) {
@@ -259,64 +260,71 @@ export default function PurchasesPage() {
     formData.hasExecutiveMembership,
     formData.otherDiscount,
     formData.otherDiscountRate,
-    calculateEffectivePrice
   ]);
+  // Function to start editing a purchase
+  // Function to start editing a purchase
+  const handleEditPurchase = (purchase: Purchase) => {
+    setEditingPurchase(purchase);
+    setIsEditing(true);
 
-  // Handle form submission
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+    // Convert date to ISO string format for the date input
+    const dateString =
+      purchase.date instanceof Date
+        ? purchase.date.toISOString().split("T")[0]
+        : new Date(purchase.date).toISOString().split("T")[0];
 
-    if (formData.productId && !selectedProduct) {
-      alert("Please select a valid product");
-      return;
-    }
+    // Set form data with the purchase details
+    setFormData({
+      date: dateString,
+      // For custom products, productId might be empty, so handle that case
+      productId: purchase.productId || "",
+      // Add null/undefined checks for all numeric properties
+      quantity:
+        purchase.quantity !== undefined ? purchase.quantity.toString() : "1",
+      amount: purchase.amount !== undefined ? purchase.amount.toString() : "1",
+      unit: purchase.unit || ("oz" as GoldUnit),
+      pricePerUnit:
+        purchase.pricePerUnit !== undefined
+          ? purchase.pricePerUnit.toString()
+          : "",
+      currency: purchase.currency || ("USD" as Currency),
+      source: purchase.source || "",
+      notes: purchase.notes || "",
+      userEnteredNotes: purchase.notes || "",
 
-    const quantity = parseFloat(formData.quantity);
-    const pricePerUnit = parseFloat(formData.pricePerUnit);
-    const amount = parseFloat(formData.quantity);
+      // Set payment methods if they exist in the purchase, otherwise use default
+      paymentMethods: purchase.paymentMethods || {
+        amexSub: false,
+        citiAA: false,
+        bofaPlatHonors: false,
+        venmo: false,
+        costcoCiti: false,
+        usBankSmartly: false,
+        chaseInkPremier: false,
+        other: false,
+      },
+      otherPaymentMethodName: "",
 
-    if (isNaN(quantity) || isNaN(pricePerUnit) || isNaN(amount)) {
-      alert("Please enter valid numbers for quantity, amount, and price");
-      return;
-    }
+      // Set discount settings - adding null checks throughout
+      usedKasheesh: purchase.notes?.includes("Kasheesh") || false,
+      hasExecutiveMembership:
+        purchase.notes?.includes("Executive membership") || false,
+      otherDiscount: purchase.notes?.includes("Other discount") || false,
+      otherDiscountRate: "",
+      otherDiscountName: "",
+    });
 
-    // Calculate total price
-    const totalPrice = quantity * pricePerUnit;
+    // Scroll to the form
+    document
+      .querySelector(".bg-white.p-6.rounded-lg.shadow-md")
+      ?.scrollIntoView({ behavior: "smooth" });
+  };
+  // Function to cancel editing
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setEditingPurchase(null);
 
-    // Calculate effective price after discounts
-    const effectivePrice = calculateEffectivePrice(totalPrice);
-
-    // Calculate effective price per unit
-    const effectivePricePerUnit = effectivePrice / quantity;
-
-    // Create the purchase object
-    const newPurchase: Purchase = {
-      id: uuidv4(),
-      date: new Date(formData.date),
-      productId: formData.productId,
-      productName: selectedProduct ? selectedProduct.name : "Custom",
-      quantity,
-      amount,
-      unit: formData.unit,
-      pricePerUnit,
-      effectivePricePerUnit,
-      currency: formData.currency,
-      source: formData.source,
-      notes: formData.notes,
-      totalPrice,
-      effectiveTotalPrice: effectivePrice,
-      discountsApplied: totalPrice !== effectivePrice,
-      paymentMethods: formData.paymentMethods,
-    };
-
-    // Add to purchases array
-    const updatedPurchases = [newPurchase, ...purchases];
-    setPurchases(updatedPurchases);
-
-    // Save to localStorage
-    localStorage.setItem("goldPurchases", JSON.stringify(updatedPurchases));
-
-    // Reset form
+    // Reset form to default values
     setFormData({
       date: new Date().toISOString().split("T")[0],
       productId: "",
@@ -347,13 +355,146 @@ export default function PurchasesPage() {
     });
   };
 
+  // Function to delete a purchase
+  const handleDeletePurchase = (purchaseId: string) => {
+    if (window.confirm("Are you sure you want to delete this purchase?")) {
+      const updatedPurchases = purchases.filter((p) => p.id !== purchaseId);
+      setPurchases(updatedPurchases);
+      localStorage.setItem("goldPurchases", JSON.stringify(updatedPurchases));
+
+      // If we're currently editing this purchase, cancel the edit
+      if (editingPurchase && editingPurchase.id === purchaseId) {
+        handleCancelEdit();
+      }
+    }
+  };
+
+  // Handle form submission
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (formData.productId && !selectedProduct) {
+      alert("Please select a valid product");
+      return;
+    }
+
+    const quantity = parseFloat(formData.quantity);
+    const pricePerUnit = parseFloat(formData.pricePerUnit);
+    const amount = parseFloat(formData.quantity);
+
+    if (isNaN(quantity) || isNaN(pricePerUnit) || isNaN(amount)) {
+      alert("Please enter valid numbers for quantity, amount, and price");
+      return;
+    }
+
+    // Calculate total price
+    const totalPrice = quantity * pricePerUnit;
+
+    // Calculate effective price after discounts
+    const effectivePrice = calculateEffectivePrice(totalPrice);
+
+    // Calculate effective price per unit
+    const effectivePricePerUnit = effectivePrice / quantity;
+
+    let updatedPurchases;
+
+    if (isEditing && editingPurchase) {
+      // Update the existing purchase
+      const updatedPurchase: Purchase = {
+        ...editingPurchase,
+        date: new Date(formData.date),
+        productId: formData.productId,
+        // For custom products, use "Custom" if no product is selected
+        productName: selectedProduct
+          ? selectedProduct.name
+          : editingPurchase.productName || "Custom",
+        quantity,
+        amount,
+        unit: formData.unit,
+        pricePerUnit,
+        effectivePricePerUnit,
+        currency: formData.currency,
+        source: formData.source,
+        notes: formData.notes,
+        totalPrice,
+        effectiveTotalPrice: effectivePrice,
+        discountsApplied: totalPrice !== effectivePrice,
+        paymentMethods: formData.paymentMethods,
+      };
+      // Replace the old purchase with the updated one
+      updatedPurchases = purchases.map((p) =>
+        p.id === editingPurchase.id ? updatedPurchase : p,
+      );
+    } else {
+      // Create a new purchase
+      const newPurchase: Purchase = {
+        id: uuidv4(),
+        date: new Date(formData.date),
+        productId: formData.productId,
+        productName: selectedProduct ? selectedProduct.name : "Custom",
+        quantity,
+        amount,
+        unit: formData.unit,
+        pricePerUnit,
+        effectivePricePerUnit,
+        currency: formData.currency,
+        source: formData.source,
+        notes: formData.notes,
+        totalPrice,
+        effectiveTotalPrice: effectivePrice,
+        discountsApplied: totalPrice !== effectivePrice,
+        paymentMethods: formData.paymentMethods,
+      };
+
+      // Add to purchases array
+      updatedPurchases = [newPurchase, ...purchases];
+    }
+
+    // Update state and save to localStorage
+    setPurchases(updatedPurchases);
+    localStorage.setItem("goldPurchases", JSON.stringify(updatedPurchases));
+
+    // Reset form and editing state
+    setIsEditing(false);
+    setEditingPurchase(null);
+    setFormData({
+      date: new Date().toISOString().split("T")[0],
+      productId: "",
+      quantity: "1",
+      amount: "",
+      unit: "oz" as GoldUnit,
+      pricePerUnit: "",
+      currency: "USD" as Currency,
+      source: "",
+      notes: "",
+      userEnteredNotes: "",
+      paymentMethods: {
+        amexSub: false,
+        citiAA: false,
+        bofaPlatHonors: false,
+        venmo: false,
+        costcoCiti: false,
+        usBankSmartly: false,
+        chaseInkPremier: false,
+        other: false,
+      },
+      otherPaymentMethodName: "",
+      usedKasheesh: false,
+      hasExecutiveMembership: false,
+      otherDiscount: false,
+      otherDiscountRate: "",
+      otherDiscountName: "",
+    });
+  };
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-bold">Gold Purchases</h1>
 
       {/* Purchase Form */}
       <div className="bg-white p-6 rounded-lg shadow-md">
-        <h2 className="text-xl font-semibold mb-4">Add New Purchase</h2>
+        <h2 className="text-xl font-semibold mb-4">
+          {isEditing ? "Edit Purchase" : "Add New Purchase"}
+        </h2>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -419,22 +560,21 @@ export default function PurchasesPage() {
 
             {/* Amount */}
             <div>
-  <label className="block text-sm font-medium text-gray-700">
-    Amount
-  </label>
-  <input
-    type="number"
-    name="amount"
-    value={formData.amount}
-    readOnly
-    className="form-input bg-gray-100" // Add background to indicate it's not editable
-    required
-  />
-  <p className="text-xs text-gray-500 mt-1">
-    Amount automatically matches quantity
-  </p>
-</div>
-
+              <label className="block text-sm font-medium text-gray-700">
+                Amount
+              </label>
+              <input
+                type="number"
+                name="amount"
+                value={formData.amount}
+                readOnly
+                className="form-input bg-gray-100" // Add background to indicate it's not editable
+                required
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Amount automatically matches quantity
+              </p>
+            </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">
                 Unit
@@ -535,7 +675,6 @@ export default function PurchasesPage() {
               </div>
             </div>
           </div>
-
           {/* Discount Settings Section */}
           <div className="mt-6 border-t pt-6">
             <h3 className="text-lg font-medium text-gray-700 mb-4">
@@ -696,7 +835,6 @@ export default function PurchasesPage() {
                 </div>
               </div>
             </div>
-
             {/* Discounts and Rebates Section */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-3">
@@ -819,17 +957,25 @@ export default function PurchasesPage() {
             />
           </div>
 
-          <div className="flex justify-end">
+          <div className="flex justify-end space-x-4">
+            {isEditing && (
+              <button
+                type="button"
+                onClick={handleCancelEdit}
+                className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              >
+                Cancel
+              </button>
+            )}
             <button
               type="submit"
               className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
             >
-              Add Purchase
+              {isEditing ? "Update Purchase" : "Add Purchase"}
             </button>
           </div>
         </form>
       </div>
-
       {/* Purchase History Table */}
       <div>
         <h2 className="text-xl font-semibold mb-4">Purchase History</h2>
@@ -840,92 +986,130 @@ export default function PurchasesPage() {
           </div>
         ) : (
           <div className="bg-white rounded-lg shadow-md overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Date
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Product
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Source
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Quantity
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Amount
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    List Price
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Effective Price
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Discounts
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {purchases.map((purchase) => (
-                  <tr key={purchase.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {purchase.date.toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {purchase.productName || "Custom"}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {purchase.source}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {purchase.quantity}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {purchase.amount} {purchase.unit}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {purchase.currency === "USD"
-                        ? "$"
-                        : purchase.currency === "EUR"
-                          ? "€"
-                          : "£"}
-                      {purchase.totalPrice.toFixed(2)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {purchase.currency === "USD"
-                        ? "$"
-                        : purchase.currency === "EUR"
-                          ? "€"
-                          : "£"}
-                      {purchase.effectiveTotalPrice?.toFixed(2)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      {purchase.discountsApplied ? (
-                        <span
-                          className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                            purchase.totalPrice > purchase.effectiveTotalPrice
-                              ? "bg-green-100 text-green-800"
-                              : "bg-red-100 text-red-800"
-                          }`}
-                        >
-                          {purchase.totalPrice > purchase.effectiveTotalPrice
-                            ? `Saved $${(purchase.totalPrice - purchase.effectiveTotalPrice).toFixed(2)}`
-                            : `Cost $${(purchase.effectiveTotalPrice - purchase.totalPrice).toFixed(2)} more`}
-                        </span>
-                      ) : (
-                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
-                          None
-                        </span>
-                      )}
-                    </td>
+            <div className="max-h-96 overflow-y-auto">
+              {/* This makes it scrollable */}
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50 sticky top-0 z-10">
+                  {/* Sticky header */}
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Date
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Product
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Source
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Quantity
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Amount
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      List Price
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Effective Price
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Discounts
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {purchases.map((purchase) => (
+                    <tr
+                      key={purchase.id}
+                      className="hover:bg-gray-50 cursor-pointer"
+                      onClick={() => handleEditPurchase(purchase)}
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {purchase.date instanceof Date
+                          ? purchase.date.toLocaleDateString()
+                          : new Date(purchase.date).toLocaleDateString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {purchase.productName || "Custom"}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {purchase.source}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {purchase.quantity}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {purchase.amount} {purchase.unit}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {purchase.currency === "USD"
+                          ? "$"
+                          : purchase.currency === "EUR"
+                            ? "€"
+                            : "£"}
+                        {purchase.totalPrice.toFixed(2)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {purchase.currency === "USD"
+                          ? "$"
+                          : purchase.currency === "EUR"
+                            ? "€"
+                            : "£"}
+                        {purchase.effectiveTotalPrice?.toFixed(2)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        {purchase.discountsApplied ? (
+                          <span
+                            className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                              purchase.totalPrice > purchase.effectiveTotalPrice
+                                ? "bg-green-100 text-green-800"
+                                : "bg-red-100 text-red-800"
+                            }`}
+                          >
+                            {purchase.totalPrice > purchase.effectiveTotalPrice
+                              ? `Saved $${(purchase.totalPrice - purchase.effectiveTotalPrice).toFixed(2)}`
+                              : `Cost $${(purchase.effectiveTotalPrice - purchase.totalPrice).toFixed(2)} more`}
+                          </span>
+                        ) : (
+                          <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
+                            None
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <div
+                          className="flex space-x-2"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditPurchase(purchase);
+                            }}
+                            className="text-indigo-600 hover:text-indigo-900"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeletePurchase(purchase.id);
+                            }}
+                            className="text-red-600 hover:text-red-900"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>

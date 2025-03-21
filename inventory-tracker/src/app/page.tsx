@@ -8,11 +8,11 @@ import { Card } from "@/components/ui/Card";
 import { Sale, Purchase } from "@/types";
 
 // Helper interfaces for parsed localStorage data
-interface ParsedPurchase extends Omit<Purchase, 'date'> {
+interface ParsedPurchase extends Omit<Purchase, "date"> {
   date: string;
 }
 
-interface ParsedSale extends Omit<Sale, 'date' | 'purchaseAllocations'> {
+interface ParsedSale extends Omit<Sale, "date" | "purchaseAllocations"> {
   date: string;
   purchaseAllocations?: Array<{
     purchaseId: string;
@@ -27,14 +27,14 @@ interface ParsedSale extends Omit<Sale, 'date' | 'purchaseAllocations'> {
 interface Transaction {
   id: string;
   date: Date;
-  type: 'purchase' | 'sale';
+  type: "purchase" | "sale";
   amount: number;
   unit: string;
   price: number;
   total: number;
   productName?: string;
   source?: string;
-  paymentMethods?: {[key: string]: boolean};
+  paymentMethods?: { [key: string]: boolean };
   notes?: string;
   profit?: number;
   purchaseAllocations?: any[];
@@ -45,15 +45,19 @@ export default function Home() {
   const [lastUpdated, setLastUpdated] = useState<string>("Loading...");
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Portfolio statistics
   const [currentHoldings, setCurrentHoldings] = useState<number>(0);
   const [estimatedValue, setEstimatedValue] = useState<number>(0);
   const [totalProfit, setTotalProfit] = useState<number>(0);
   const [totalInvestment, setTotalInvestment] = useState<number>(0);
   const [profitPercentage, setProfitPercentage] = useState<number>(0);
-  const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([]);
-  const [expandedRows, setExpandedRows] = useState<{[key: string]: boolean}>({});
+  const [recentTransactions, setRecentTransactions] = useState<Transaction[]>(
+    [],
+  );
+  const [expandedRows, setExpandedRows] = useState<{ [key: string]: boolean }>(
+    {},
+  );
 
   useEffect(() => {
     // Fetch gold price
@@ -103,13 +107,13 @@ export default function Home() {
       // Load purchases from localStorage
       const savedPurchases = localStorage.getItem("goldPurchases");
       const purchases: Purchase[] = [];
-      
+
       if (savedPurchases) {
         const parsedPurchases = JSON.parse(savedPurchases) as ParsedPurchase[];
-        parsedPurchases.forEach(purchase => {
+        parsedPurchases.forEach((purchase) => {
           purchases.push({
             ...purchase,
-            date: new Date(purchase.date)
+            date: new Date(purchase.date),
           });
         });
       }
@@ -117,31 +121,31 @@ export default function Home() {
       // Load sales from localStorage
       const savedSales = localStorage.getItem("goldSales");
       const sales: Sale[] = [];
-      
+
       if (savedSales) {
         const parsedSales = JSON.parse(savedSales) as ParsedSale[];
-        parsedSales.forEach(sale => {
+        parsedSales.forEach((sale) => {
           sales.push({
             ...sale,
             date: new Date(sale.date),
-            purchaseAllocations: sale.purchaseAllocations ? 
-              sale.purchaseAllocations.map(alloc => ({
-                ...alloc,
-                purchaseDate: new Date(alloc.purchaseDate)
-              })) : undefined
+            purchaseAllocations: sale.purchaseAllocations
+              ? sale.purchaseAllocations.map((alloc) => ({
+                  ...alloc,
+                  purchaseDate: new Date(alloc.purchaseDate),
+                }))
+              : undefined,
           });
         });
       }
 
       // Calculate current holdings (purchases - sales)
       calculateCurrentHoldings(purchases, sales);
-      
+
       // Calculate total profit from sales
       calculateTotalProfit(sales);
-      
+
       // Populate recent transactions
       populateRecentTransactions(purchases, sales);
-      
     } catch (error) {
       console.error("Error loading transaction data:", error);
     }
@@ -171,7 +175,7 @@ export default function Home() {
       const price = purchase.effectiveTotalPrice || purchase.totalPrice;
       return total + price;
     }, 0);
-    
+
     setTotalInvestment(investment);
   };
 
@@ -180,9 +184,9 @@ export default function Home() {
     const profit = sales.reduce((total, sale) => {
       return total + sale.profit;
     }, 0);
-    
+
     setTotalProfit(profit);
-    
+
     // Calculate overall profit percentage
     if (totalInvestment > 0) {
       setProfitPercentage((profit / totalInvestment) * 100);
@@ -192,18 +196,18 @@ export default function Home() {
   const populateRecentTransactions = (purchases: Purchase[], sales: Sale[]) => {
     // Create a map of purchase IDs to product names for quick lookup
     const purchaseProductMap = new Map<string, string>();
-    purchases.forEach(purchase => {
+    purchases.forEach((purchase) => {
       if (purchase.id && purchase.productName) {
         purchaseProductMap.set(purchase.id, purchase.productName);
       }
     });
-    
+
     // Combine purchases and sales into a single array of transactions
     const allTransactions = [
-      ...purchases.map(purchase => ({
+      ...purchases.map((purchase) => ({
         id: purchase.id,
         date: purchase.date,
-        type: 'purchase' as const,
+        type: "purchase" as const,
         amount: purchase.amount,
         unit: purchase.unit,
         price: purchase.pricePerUnit,
@@ -211,19 +215,19 @@ export default function Home() {
         productName: purchase.productName,
         source: purchase.source,
         paymentMethods: purchase.paymentMethods,
-        notes: purchase.notes
+        notes: purchase.notes,
       })),
-      ...sales.map(sale => {
+      ...sales.map((sale) => {
         // Enhance purchase allocations with product names if possible
-        const enhancedAllocations = sale.purchaseAllocations?.map(alloc => ({
+        const enhancedAllocations = sale.purchaseAllocations?.map((alloc) => ({
           ...alloc,
-          productName: purchaseProductMap.get(alloc.purchaseId) || ""
+          productName: purchaseProductMap.get(alloc.purchaseId) || "",
         }));
-        
+
         return {
           id: sale.id,
           date: sale.date,
-          type: 'sale' as const,
+          type: "sale" as const,
           amount: sale.amount,
           unit: sale.unit,
           price: sale.pricePerUnit,
@@ -231,62 +235,74 @@ export default function Home() {
           profit: sale.profit,
           source: sale.orderNumber,
           notes: sale.notes,
-          purchaseAllocations: enhancedAllocations
+          purchaseAllocations: enhancedAllocations,
         };
-      })
+      }),
     ];
-    
+
     // Sort by date, most recent first
     allTransactions.sort((a, b) => b.date.getTime() - a.date.getTime());
-    
+
     // Take only the 10 most recent transactions
     setRecentTransactions(allTransactions.slice(0, 10));
   };
 
   // Toggle expanded row
   const toggleExpandRow = (id: string) => {
-    setExpandedRows(prev => ({
+    setExpandedRows((prev) => ({
       ...prev,
-      [id]: !prev[id]
+      [id]: !prev[id],
     }));
   };
 
   // Helper to format payment methods list
-  const formatPaymentMethods = (methods: {[key: string]: boolean}) => {
+  const formatPaymentMethods = (methods: { [key: string]: boolean }) => {
     if (!methods) return "None";
-    
+
     const activePayments = Object.entries(methods)
       .filter(([, active]) => active)
       .map(([method]) => {
         // Format the payment method name for better readability
-        return method === 'amexSub' ? 'Amex SUB' :
-               method === 'citiAA' ? 'Citi AA' :
-               method === 'bofaPlatHonors' ? 'BofA Plat Honors' :
-               method === 'venmo' ? 'Venmo' :
-               method === 'costcoCiti' ? 'Costco Citi' :
-               method === 'usBankSmartly' ? 'US Bank Smartly' :
-               method === 'chaseInkPremier' ? 'Chase Ink Premier' : 
-               method === 'other' ? 'Other' : method;
+        return method === "amexSub"
+          ? "Amex SUB"
+          : method === "citiAA"
+            ? "Citi AA"
+            : method === "bofaPlatHonors"
+              ? "BofA Plat Honors"
+              : method === "venmo"
+                ? "Venmo"
+                : method === "costcoCiti"
+                  ? "Costco Citi"
+                  : method === "usBankSmartly"
+                    ? "US Bank Smartly"
+                    : method === "chaseInkPremier"
+                      ? "Chase Ink Premier"
+                      : method === "other"
+                        ? "Other"
+                        : method;
       });
-    
-    return activePayments.length > 0 ? activePayments.join(', ') : "None";
+
+    return activePayments.length > 0 ? activePayments.join(", ") : "None";
   };
 
   // Format structured transaction notes
   const formatTransactionNotes = (notes: string) => {
     if (!notes) return null;
-    
-    if (notes.includes('Profit Details:')) {
+
+    if (notes.includes("Profit Details:")) {
       const sections = notes.split(/\n+/);
-      
+
       return (
         <>
           {sections.map((section, index) => {
-            if (section.includes(':')) {
-              const [title, ...rest] = section.split(':');
-              const content = rest.join(':').trim();
-              
-              if (title.trim() === 'Cost Basis Details' || title.trim() === 'Total Cost Basis') {
+            if (section.includes(":")) {
+              const [title, ...rest] = section.split(":");
+              const content = rest.join(":").trim();
+
+              if (
+                title.trim() === "Cost Basis Details" ||
+                title.trim() === "Total Cost Basis"
+              ) {
                 return (
                   <div key={index} className="mt-1">
                     <span className="font-medium">{title.trim()}:</span>
@@ -294,8 +310,8 @@ export default function Home() {
                   </div>
                 );
               }
-              
-              if (title.trim() === 'Fees') {
+
+              if (title.trim() === "Fees") {
                 return (
                   <div key={index} className="mt-1">
                     <span className="font-medium">{title.trim()}:</span>
@@ -303,15 +319,15 @@ export default function Home() {
                   </div>
                 );
               }
-              
-              if (section.includes('Net Profit:')) {
+
+              if (section.includes("Net Profit:")) {
                 return (
                   <div key={index} className="mt-1 font-medium text-green-600">
                     {section}
                   </div>
                 );
               }
-              
+
               return (
                 <div key={index} className="mt-1">
                   <span className="font-medium">{title.trim()}:</span>
@@ -319,13 +335,13 @@ export default function Home() {
                 </div>
               );
             }
-            
+
             return <div key={index}>{section}</div>;
           })}
         </>
       );
     }
-    
+
     return notes;
   };
 
@@ -353,7 +369,9 @@ export default function Home() {
             <CardTitle>Total Profit/Loss</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className={`text-3xl font-bold mt-2 ${totalProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            <p
+              className={`text-3xl font-bold mt-2 ${totalProfit >= 0 ? "text-green-600" : "text-red-600"}`}
+            >
               ${totalProfit.toFixed(2)}
             </p>
             <p className="text-sm text-gray-700 mt-1">
@@ -404,7 +422,7 @@ export default function Home() {
               {recentTransactions.length > 0 ? (
                 recentTransactions.map((transaction) => (
                   <React.Fragment key={transaction.id}>
-                    <tr 
+                    <tr
                       onClick={() => toggleExpandRow(transaction.id)}
                       className="cursor-pointer hover:bg-gray-50 transition-colors"
                     >
@@ -412,12 +430,15 @@ export default function Home() {
                         {transaction.date.toLocaleDateString()}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          transaction.type === 'purchase' 
-                            ? 'bg-blue-100 text-blue-800' 
-                            : 'bg-green-100 text-green-800'
-                        }`}>
-                          {transaction.type.charAt(0).toUpperCase() + transaction.type.slice(1)}
+                        <span
+                          className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                            transaction.type === "purchase"
+                              ? "bg-blue-100 text-blue-800"
+                              : "bg-green-100 text-green-800"
+                          }`}
+                        >
+                          {transaction.type.charAt(0).toUpperCase() +
+                            transaction.type.slice(1)}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -428,9 +449,12 @@ export default function Home() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         ${transaction.total.toFixed(2)}
-                        {transaction.type === 'sale' && transaction.profit && (
-                          <span className={`ml-2 text-xs ${transaction.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            ({transaction.profit >= 0 ? '+' : ''}${transaction.profit.toFixed(2)})
+                        {transaction.type === "sale" && transaction.profit && (
+                          <span
+                            className={`ml-2 text-xs ${transaction.profit >= 0 ? "text-green-600" : "text-red-600"}`}
+                          >
+                            ({transaction.profit >= 0 ? "+" : ""}$
+                            {transaction.profit.toFixed(2)})
                           </span>
                         )}
                       </td>
@@ -440,21 +464,30 @@ export default function Home() {
                         <td colSpan={5} className="px-6 py-4">
                           <div className="text-sm text-gray-700 space-y-3">
                             {/* Different details based on transaction type */}
-                            {transaction.type === 'purchase' ? (
+                            {transaction.type === "purchase" ? (
                               <>
                                 {transaction.productName && (
                                   <div>
-                                    <span className="font-medium">Product:</span> {transaction.productName}
+                                    <span className="font-medium">
+                                      Product:
+                                    </span>{" "}
+                                    {transaction.productName}
                                   </div>
                                 )}
                                 {transaction.source && (
                                   <div>
-                                    <span className="font-medium">Source:</span> {transaction.source}
+                                    <span className="font-medium">Source:</span>{" "}
+                                    {transaction.source}
                                   </div>
                                 )}
                                 {transaction.paymentMethods && (
                                   <div>
-                                    <span className="font-medium">Payment Methods:</span> {formatPaymentMethods(transaction.paymentMethods)}
+                                    <span className="font-medium">
+                                      Payment Methods:
+                                    </span>{" "}
+                                    {formatPaymentMethods(
+                                      transaction.paymentMethods,
+                                    )}
                                   </div>
                                 )}
                               </>
@@ -462,41 +495,72 @@ export default function Home() {
                               <>
                                 {transaction.source && (
                                   <div>
-                                    <span className="font-medium">Order Number:</span> {transaction.source}
+                                    <span className="font-medium">
+                                      Order Number:
+                                    </span>{" "}
+                                    {transaction.source}
                                   </div>
                                 )}
                                 {transaction.profit !== undefined && (
                                   <div>
-                                    <span className="font-medium">Profit:</span> <span className={transaction.profit >= 0 ? 'text-green-600' : 'text-red-600'}>
+                                    <span className="font-medium">Profit:</span>{" "}
+                                    <span
+                                      className={
+                                        transaction.profit >= 0
+                                          ? "text-green-600"
+                                          : "text-red-600"
+                                      }
+                                    >
                                       ${transaction.profit.toFixed(2)}
                                     </span>
                                   </div>
                                 )}
-                                {transaction.purchaseAllocations && transaction.purchaseAllocations.length > 0 && (
-                                  <div>
-                                    <span className="font-medium">Source Purchases:</span>
-                                    <ul className="list-disc ml-5 mt-1">
-                                      {transaction.purchaseAllocations.map((alloc, index) => (
-                                        <li key={index}>
-                                          {alloc.amount.toFixed(3)} oz @ ${alloc.costBasisPerUnit.toFixed(2)}/oz 
-                                          ({new Date(alloc.purchaseDate).toLocaleDateString()})
-                                          {alloc.productName && <span className="ml-1 text-gray-600">- {alloc.productName}</span>}
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                )}
+                                {transaction.purchaseAllocations &&
+                                  transaction.purchaseAllocations.length >
+                                    0 && (
+                                    <div>
+                                      <span className="font-medium">
+                                        Source Purchases:
+                                      </span>
+                                      <ul className="list-disc ml-5 mt-1">
+                                        {transaction.purchaseAllocations.map(
+                                          (alloc, index) => (
+                                            <li key={index}>
+                                              {alloc.amount.toFixed(3)} oz @ $
+                                              {alloc.costBasisPerUnit.toFixed(
+                                                2,
+                                              )}
+                                              /oz (
+                                              {new Date(
+                                                alloc.purchaseDate,
+                                              ).toLocaleDateString()}
+                                              )
+                                              {alloc.productName && (
+                                                <span className="ml-1 text-gray-600">
+                                                  - {alloc.productName}
+                                                </span>
+                                              )}
+                                            </li>
+                                          ),
+                                        )}
+                                      </ul>
+                                    </div>
+                                  )}
                               </>
                             )}
                             {transaction.notes && (
                               <div>
                                 <span className="font-medium">Notes:</span>
-                                {transaction.notes.includes('Profit Details:') ? (
+                                {transaction.notes.includes(
+                                  "Profit Details:",
+                                ) ? (
                                   <div className="mt-2 space-y-1.5 pl-2 text-sm">
                                     {formatTransactionNotes(transaction.notes)}
                                   </div>
                                 ) : (
-                                  <span className="ml-1">{transaction.notes}</span>
+                                  <span className="ml-1">
+                                    {transaction.notes}
+                                  </span>
                                 )}
                               </div>
                             )}
