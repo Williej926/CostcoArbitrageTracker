@@ -323,8 +323,21 @@ export default function SalesPage() {
   };
 
   // Filter out purchases that have been completely sold
+  // Filter out purchases that have been completely sold
   const getAvailablePurchases = () => {
     return purchases.filter((purchase) => {
+      // If we're editing, include purchases from the current sale regardless of availability
+      if (isEditing && editingSale && editingSale.purchaseAllocations) {
+        const isInCurrentSale = editingSale.purchaseAllocations.some(
+          (alloc) => alloc.purchaseId === purchase.id,
+        );
+
+        if (isInCurrentSale) {
+          return true;
+        }
+      }
+
+      // Otherwise, check available amount
       return getAvailableAmount(purchase.id) > 0;
     });
   };
