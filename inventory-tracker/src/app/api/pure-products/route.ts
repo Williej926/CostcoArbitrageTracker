@@ -9,7 +9,7 @@ export async function GET() {
       material: "Gold",
     });
     const url = `https://public.api.collectpure.com/v1/products?${queryParams.toString()}`;
-    const apiKey = process.env.PURE_API_KEY || '';
+    const apiKey = process.env.PURE_API_KEY || "";
     const response = await fetch(url, {
       method: "GET",
       headers: {

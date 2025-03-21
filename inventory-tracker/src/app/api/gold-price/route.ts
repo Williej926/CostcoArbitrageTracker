@@ -4,8 +4,8 @@ import { NextResponse } from "next/server";
 export async function GET() {
   try {
     // Get the API key and ensure it's a string
-    const apiKey = process.env.PURE_API_KEY || '';
-    
+    const apiKey = process.env.PURE_API_KEY || "";
+
     const response = await fetch(
       "https://public.api.collectpure.com/v1/spot-prices",
       {
