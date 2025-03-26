@@ -125,7 +125,7 @@ export default function PurchasesPage() {
     venmo: 0.01,
     costcoCiti: 0.02,
     usBankSmartly: 0.015,
-    chaseInkPremier: 0.03,
+    chaseInkPremier: 0.025,
     other: 0,
   };
 
